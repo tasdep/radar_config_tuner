@@ -230,49 +230,6 @@ button:hover {
   gap: 14px;
 }
 
-.chirp-plot {
-  width: 100%;
-  height: auto;
-  min-height: 190px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: #fbfcfd;
-}
-
-.chirp-plot text {
-  fill: var(--muted);
-  font-size: 12px;
-}
-
-.plot-axis {
-  stroke: #83919d;
-  stroke-width: 1.4;
-}
-
-.plot-idle {
-  fill: #edf2f4;
-}
-
-.plot-adc {
-  fill: #dcebf6;
-}
-
-.plot-ramp {
-  stroke: var(--accent);
-  stroke-width: 3;
-}
-
-.plot-marker {
-  stroke: #95a3ad;
-  stroke-width: 1;
-  stroke-dasharray: 4 4;
-}
-
-.sample-ticks line {
-  stroke: #245f73;
-  stroke-width: 1;
-}
-
 .timing-row {
   display: grid;
   grid-template-columns: 92px minmax(0, 1fr);

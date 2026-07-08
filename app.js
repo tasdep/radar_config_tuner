@@ -397,38 +397,8 @@ function timingGraphic(m) {
   const chirpUs = m.chirpPeriod * 1e6;
   const idlePct = Math.max(6, Math.min(94, state.idleTime / chirpUs * 100));
   const rampPct = Math.max(6, 100 - idlePct);
-  const rampStartUs = state.idleTime;
-  const adcStartUs = state.idleTime + 7;
-  const adcEndUs = adcStartUs + m.adcTime * 1e6;
-  const x = (us) => 40 + (us / chirpUs) * 420;
-  const rampStartX = x(rampStartUs);
-  const adcStartX = x(adcStartUs);
-  const adcEndX = Math.min(460, x(adcEndUs));
-  const rampEndX = x(chirpUs);
-  const startFreqY = 138;
-  const endFreqY = 42;
-  const sampleTicks = Array.from({ length: Math.min(17, state.adcSamples) }, (_, i) => {
-    const tickX = adcStartX + (adcEndX - adcStartX) * i / Math.max(1, Math.min(16, state.adcSamples - 1));
-    return `<line x1="${fmt(tickX, 2)}" y1="112" x2="${fmt(tickX, 2)}" y2="126" />`;
-  }).join("");
 
   return `
-    <svg class="chirp-plot" viewBox="0 0 500 170" role="img" aria-label="Chirp frequency ramp plot">
-      <line class="plot-axis" x1="40" y1="140" x2="462" y2="140" />
-      <line class="plot-axis" x1="40" y1="30" x2="40" y2="140" />
-      <text x="42" y="24">frequency</text>
-      <text x="430" y="158">time</text>
-      <rect class="plot-idle" x="40" y="44" width="${fmt(rampStartX - 40, 2)}" height="96" />
-      <rect class="plot-adc" x="${fmt(adcStartX, 2)}" y="36" width="${fmt(Math.max(2, adcEndX - adcStartX), 2)}" height="104" />
-      <line class="plot-ramp" x1="${fmt(rampStartX, 2)}" y1="${startFreqY}" x2="${fmt(rampEndX, 2)}" y2="${endFreqY}" />
-      <g class="sample-ticks">${sampleTicks}</g>
-      <line class="plot-marker" x1="${fmt(rampStartX, 2)}" y1="34" x2="${fmt(rampStartX, 2)}" y2="146" />
-      <line class="plot-marker" x1="${fmt(adcStartX, 2)}" y1="34" x2="${fmt(adcStartX, 2)}" y2="146" />
-      <line class="plot-marker" x1="${fmt(rampEndX, 2)}" y1="34" x2="${fmt(rampEndX, 2)}" y2="146" />
-      <text x="${fmt(Math.max(46, rampStartX / 2), 2)}" y="64">idle</text>
-      <text x="${fmt(adcStartX + 6, 2)}" y="56">ADC samples</text>
-      <text x="${fmt(rampStartX + 10, 2)}" y="126">slope ${fmt(state.slope, 1)} MHz/us</text>
-    </svg>
     <div class="timing-row">
       <span>Frame</span>
       <div class="frame-track">
