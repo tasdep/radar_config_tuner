@@ -14,7 +14,7 @@
           <p>Velocity-first chirp tuning for TI 1843/6843 AOP demo configs.</p>
         </div>
         <div class="actions">
-          <button id="optimizeVelocity" type="button">Apply Best Candidate</button>
+          <button id="optimizeVelocity" type="button">Solve Targets</button>
           <button id="copyConfig" type="button">Copy CFG</button>
           <button id="downloadConfig" type="button">Download</button>
         </div>
@@ -39,43 +39,41 @@
 
           <section class="panel">
             <h2>Targets</h2>
-            <label class="field">
-              <span>Search priority</span>
-              <select id="priority">
-                <option value="velocity">Best velocity resolution</option>
-                <option value="range">Best range resolution</option>
-                <option value="balanced">Balanced</option>
-              </select>
-            </label>
             <div class="slider-row">
               <label for="frameRate">Frame rate</label>
               <output id="frameRateOut"></output>
               <input id="frameRate" type="range" min="1" max="30" step="1">
+              <small id="frameRateBounds"></small>
             </div>
             <div class="slider-row">
               <label for="rangeGate">Output range gate</label>
               <output id="rangeGateOut"></output>
               <input id="rangeGate" type="range" min="2" max="30" step="0.1">
+              <small id="rangeGateBounds"></small>
             </div>
             <div class="slider-row">
               <label for="maxVelocityTarget">Max radial velocity</label>
               <output id="maxVelocityTargetOut"></output>
               <input id="maxVelocityTarget" type="range" min="0.5" max="8" step="0.01">
+              <small id="maxVelocityTargetBounds"></small>
             </div>
             <div class="slider-row">
               <label for="velocityResolutionTarget">Velocity resolution target</label>
               <output id="velocityResolutionTargetOut"></output>
               <input id="velocityResolutionTarget" type="range" min="0.02" max="0.5" step="0.001">
+              <small id="velocityResolutionTargetBounds"></small>
             </div>
             <div class="slider-row">
               <label for="rangeResolutionTarget">Range resolution target</label>
               <output id="rangeResolutionTargetOut"></output>
               <input id="rangeResolutionTarget" type="range" min="0.03" max="0.5" step="0.001">
+              <small id="rangeResolutionTargetBounds"></small>
             </div>
             <div class="slider-row">
               <label for="dutyLimit">Active chirp budget</label>
               <output id="dutyLimitOut"></output>
               <input id="dutyLimit" type="range" min="30" max="70" step="1">
+              <small id="dutyLimitBounds"></small>
             </div>
           </section>
 
@@ -157,14 +155,6 @@
               <span>Duty</span>
               <strong id="duty">-</strong>
             </article>
-          </section>
-
-          <section class="panel candidates-panel">
-            <div class="config-header">
-              <h2>Candidates</h2>
-              <span id="candidateSummary"></span>
-            </div>
-            <div id="candidateTable" class="candidate-table"></div>
           </section>
 
           <section class="panel status-panel">

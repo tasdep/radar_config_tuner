@@ -24,7 +24,6 @@ const DEVICES = {
 
 const state = {
   device: "6843",
-  priority: "velocity",
   frameRate: 10,
   rangeGate: 20,
   maxVelocityTarget: 2.05,
@@ -45,7 +44,6 @@ const state = {
 const ids = [
   "device",
   "usePushedMargin",
-  "priority",
   "frameRate",
   "rangeGate",
   "maxVelocityTarget",
@@ -133,138 +131,106 @@ function dutyBudget() {
     : state.dutyLimit;
 }
 
-function candidateLabel(candidate, index) {
-  if (index === 0) return "Best match";
-  if (candidate.m.duty < state.dutyLimit / 100 - 0.08) return "Timing margin";
-  if (candidate.m.rangeResolution < state.rangeResolutionTarget * 0.8) return "Sharper range";
-  if (candidate.m.velocityResolution < state.velocityResolutionTarget * 0.8) return "Sharper velocity";
-  return `Option ${index + 1}`;
+function targetBounds() {
+  const adcBins = nextPowerOfTwo(state.adcSamples);
+  const sampleRateHz = state.sampleRate * 1000;
+  const device = currentDevice();
+  const adcTimeUs = state.adcSamples / sampleRateHz * 1e6;
+  const minRampUs = Math.max(10, Math.ceil(adcTimeUs + 8));
+  const rangeSpanFromTarget = state.rangeResolutionTarget * adcBins;
+  const minRangeResolutionForGate = state.rangeGate / adcBins;
+  const centerFreq =
+    device.startFreqGHz * 1e9 +
+    state.slope * 1e12 * (7e-6 + (state.adcSamples / sampleRateHz) / 2);
+  const minChirpUs = minRampUs + 10;
+  const maxVelocityFromTiming = C / (4 * centerFreq * minChirpUs * 1e-6 * NUM_TX);
+  const chirpForVelocityUs =
+    C / (4 * centerFreq * NUM_TX * state.maxVelocityTarget) * 1e6;
+  const chirpUs = Math.max(minChirpUs, chirpForVelocityUs);
+  const frameBudgetUs = (1000000 / state.frameRate) * dutyBudget() / 100;
+  const maxLoops = Math.max(1, Math.min(256, Math.floor(frameBudgetUs / (NUM_TX * chirpUs))));
+  const minVelocityResolution =
+    C / (2 * centerFreq * chirpUs * 1e-6 * NUM_TX * maxLoops);
+  const minDutyPercent = Math.ceil((NUM_TX * maxLoops * chirpUs) / (1000000 / state.frameRate) * 100);
+
+  return {
+    frameRate: {
+      min: 1,
+      max: 30,
+      text: "set before solving timing budget",
+    },
+    rangeGate: {
+      min: 2,
+      max: Math.max(2, Math.min(30, rangeSpanFromTarget)),
+      text: `range res target gives up to ${fmt(rangeSpanFromTarget, 1)} m with ${adcBins} bins`,
+    },
+    maxVelocityTarget: {
+      min: 0.5,
+      max: Math.max(0.5, Math.min(8, maxVelocityFromTiming)),
+      text: `minimum chirp period allows ${fmt(maxVelocityFromTiming, 2)} m/s`,
+    },
+    velocityResolutionTarget: {
+      min: Math.max(0.02, Math.min(0.5, minVelocityResolution)),
+      max: 0.5,
+      text: `best at current speed/duty is ${fmt(minVelocityResolution, 4)} m/s`,
+    },
+    rangeResolutionTarget: {
+      min: Math.max(0.03, Math.min(0.5, minRangeResolutionForGate)),
+      max: 0.5,
+      text: `output range needs at least ${fmt(minRangeResolutionForGate, 3)} m with ${adcBins} bins`,
+    },
+    dutyLimit: {
+      min: Math.max(30, Math.min(70, minDutyPercent)),
+      max: 70,
+      text: `current speed target needs about ${minDutyPercent}% active chirp time`,
+    },
+  };
 }
 
-function candidateScore(m) {
-  const velocityRatio = m.velocityResolution / state.velocityResolutionTarget;
-  const rangeRatio = m.rangeResolution / state.rangeResolutionTarget;
-  const velocityHeadroom = Math.max(0, state.maxVelocityTarget / m.maxVelocity - 1) * 100;
-  const rangeHeadroom = Math.max(0, state.rangeGate / m.fftRangeSpan - 1) * 100;
-  const dutyHeadroom = Math.max(0, m.duty / (state.dutyLimit / 100) - 1) * 100;
-
-  if (state.priority === "range") {
-    return rangeRatio * 100 + velocityRatio * 18 + velocityHeadroom + rangeHeadroom + dutyHeadroom;
+function applyTargetBounds(bounds) {
+  for (const [id, bound] of Object.entries(bounds)) {
+    const el = els[id];
+    if (!el) continue;
+    const step = Number(el.step || 1);
+    const min = Number(bound.min.toFixed(4));
+    const max = Number(bound.max.toFixed(4));
+    el.min = min;
+    el.max = Math.max(min, max);
+    if (state[id] < min) state[id] = min;
+    if (state[id] > max) state[id] = max;
+    if (step >= 1) state[id] = Math.round(state[id]);
   }
-  if (state.priority === "balanced") {
-    return rangeRatio * 55 + velocityRatio * 55 + velocityHeadroom + rangeHeadroom + dutyHeadroom;
-  }
-  return velocityRatio * 100 + rangeRatio * 18 + velocityHeadroom + rangeHeadroom + dutyHeadroom;
-}
-
-function generateCandidates() {
-  const sampleRates = [5209, 6250, 7500, 8333, 9142, 10000, 11000, 12500];
-  const adcSamplesOptions = [64, 128, 256];
-  const framePeriodUs = (1000000 / state.frameRate);
-  const budgetUs = framePeriodUs * dutyBudget() / 100;
-  const candidates = [];
-
-  for (const adcSamples of adcSamplesOptions) {
-    for (const sampleRate of sampleRates) {
-      const adcTimeUs = adcSamples / (sampleRate * 1000) * 1e6;
-      const minRamp = Math.max(10, Math.ceil(adcTimeUs + 8));
-
-      for (let slope = 20; slope <= 100; slope += 1) {
-        for (const rampPadding of [0, 2, 5, 8]) {
-          const rampEndTime = minRamp + rampPadding;
-          if (rampEndTime > 80) continue;
-
-          const probe = metricsFor({
-            ...state,
-            adcSamples,
-            sampleRate,
-            slope,
-            rampEndTime,
-            idleTime: 10,
-            numLoops: 1,
-          });
-          if (probe.fftRangeSpan < state.rangeGate) continue;
-          if (probe.rangeResolution > state.rangeResolutionTarget) continue;
-
-          const centerFreq = probe.centerFreq;
-          const maxChirpUs = Math.floor(
-            (C / (4 * centerFreq * NUM_TX * state.maxVelocityTarget)) * 1e6
-          );
-          const minChirpUs = Math.ceil(rampEndTime + 10);
-          if (maxChirpUs < minChirpUs) continue;
-
-          const chirpChoices = new Set([
-            minChirpUs,
-            Math.floor((minChirpUs + maxChirpUs) / 2),
-            maxChirpUs - 4,
-            maxChirpUs,
-          ]);
-
-          for (const chirpUs of chirpChoices) {
-            if (chirpUs < minChirpUs || chirpUs > maxChirpUs) continue;
-            const idleTime = chirpUs - rampEndTime;
-            const numLoops = Math.min(256, Math.floor(budgetUs / (NUM_TX * chirpUs)));
-            if (numLoops < 1) continue;
-
-            const params = {
-              ...state,
-              adcSamples,
-              sampleRate,
-              slope,
-              rampEndTime,
-              idleTime,
-              numLoops,
-            };
-            const m = metricsFor(params);
-            if (!m.adcFits) continue;
-            if (m.duty > state.dutyLimit / 100) continue;
-            if (m.maxVelocity < state.maxVelocityTarget) continue;
-            if (m.velocityResolution > state.velocityResolutionTarget) continue;
-            if (m.rangeResolution > state.rangeResolutionTarget) continue;
-
-            candidates.push({
-              params,
-              m,
-              score: candidateScore(m),
-              key: `${adcSamples}-${sampleRate}-${slope}-${rampEndTime}-${idleTime}-${numLoops}`,
-            });
-          }
-        }
-      }
-    }
-  }
-
-  const unique = new Map();
-  for (const candidate of candidates) {
-    const existing = unique.get(candidate.key);
-    if (!existing || candidate.score < existing.score) unique.set(candidate.key, candidate);
-  }
-
-  return Array.from(unique.values())
-    .sort((a, b) => a.score - b.score)
-    .slice(0, 12)
-    .map((candidate, index) => ({
-      ...candidate,
-      label: candidateLabel(candidate, index),
-    }));
-}
-
-function applyCandidate(candidate) {
-  Object.assign(state, {
-    adcSamples: candidate.params.adcSamples,
-    sampleRate: candidate.params.sampleRate,
-    slope: candidate.params.slope,
-    idleTime: candidate.params.idleTime,
-    rampEndTime: candidate.params.rampEndTime,
-    numLoops: candidate.params.numLoops,
-  });
-  syncInputs();
-  render();
 }
 
 function optimizeVelocity() {
-  const [best] = generateCandidates();
-  if (best) applyCandidate(best);
+  const device = currentDevice();
+  const sampleRateHz = state.sampleRate * 1000;
+  const adcTimeUs = state.adcSamples / sampleRateHz * 1e6;
+  const minRamp = Math.max(10, Math.ceil(adcTimeUs + 8));
+  const maxSlopeForRange =
+    C * sampleRateHz / (2 * state.rangeGate * 1e12);
+  const slopeForResolution =
+    C * sampleRateHz / (2 * state.adcSamples * state.rangeResolutionTarget * 1e12);
+  state.slope = Math.max(10, Math.min(120, Math.min(maxSlopeForRange, slopeForResolution)));
+  state.rampEndTime = Math.max(minRamp, Math.min(80, state.rampEndTime));
+
+  const slopeHzPerS = state.slope * 1e12;
+  const centerFreq =
+    device.startFreqGHz * 1e9 +
+    slopeHzPerS * (7e-6 + state.adcSamples / sampleRateHz / 2);
+  const chirpForVelocityUs =
+    C / (4 * centerFreq * NUM_TX * state.maxVelocityTarget) * 1e6;
+  const chirpUs = Math.max(state.rampEndTime + 10, Math.floor(chirpForVelocityUs));
+  state.idleTime = Math.max(10, Math.round(chirpUs - state.rampEndTime));
+
+  const budgetUs = (1000000 / state.frameRate) * dutyBudget() / 100;
+  const loopsForResolution =
+    C / (2 * centerFreq * (state.idleTime + state.rampEndTime) * 1e-6 * NUM_TX * state.velocityResolutionTarget);
+  const maxLoops = Math.floor(budgetUs / (NUM_TX * (state.idleTime + state.rampEndTime)));
+  state.numLoops = Math.max(1, Math.min(256, Math.floor(Math.min(maxLoops, Math.max(loopsForResolution, 1)))));
+
+  syncInputs();
+  render();
 }
 
 function statusItems(m) {
@@ -418,7 +384,6 @@ function liveValues(m) {
 function syncInputs() {
   els.device.value = state.device;
   els.usePushedMargin.checked = state.usePushedMargin;
-  els.priority.value = state.priority;
   els.frameRate.value = state.frameRate;
   els.rangeGate.value = state.rangeGate;
   els.maxVelocityTarget.value = state.maxVelocityTarget;
@@ -435,64 +400,11 @@ function syncInputs() {
   els.dopplerThreshold.value = state.dopplerThreshold;
 }
 
-function candidateTable(candidates) {
-  if (candidates.length === 0) {
-    return `
-      <div class="empty-candidates">
-        No candidates meet every target. Loosen range resolution, velocity resolution, duty, range, or max speed.
-      </div>
-    `;
-  }
-
-  const rows = candidates.map((candidate, index) => {
-    const p = candidate.params;
-    const m = candidate.m;
-    const active =
-      p.adcSamples === state.adcSamples &&
-      p.sampleRate === state.sampleRate &&
-      p.slope === state.slope &&
-      p.idleTime === state.idleTime &&
-      p.rampEndTime === state.rampEndTime &&
-      p.numLoops === state.numLoops;
-    return `
-      <tr class="${active ? "selected-candidate" : ""}">
-        <td>
-          <strong>${candidate.label}</strong>
-          <span>${p.adcSamples} ADC, ${fmt(p.sampleRate / 1000, 3)} Msps</span>
-        </td>
-        <td>${fmt(m.velocityResolution, 4)} m/s</td>
-        <td>${fmt(m.rangeResolution, 4)} m</td>
-        <td>${fmt(m.maxVelocity, 3)} m/s</td>
-        <td>${fmt(m.fftRangeSpan, 2)} m</td>
-        <td>${fmt(m.duty * 100, 1)}%</td>
-        <td>${fmt(p.slope, 1)} / ${Math.round(p.idleTime)} / ${fmt(p.rampEndTime, 1)} / ${p.numLoops}</td>
-        <td><button type="button" data-candidate="${index}">${active ? "Selected" : "Select"}</button></td>
-      </tr>
-    `;
-  }).join("");
-
-  return `
-    <table>
-      <thead>
-        <tr>
-          <th>Candidate</th>
-          <th>Vel res</th>
-          <th>Range res</th>
-          <th>Max vel</th>
-          <th>Range span</th>
-          <th>Duty</th>
-          <th>Slope / idle / ramp / loops</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>${rows}</tbody>
-    </table>
-  `;
-}
-
 function render() {
+  const bounds = targetBounds();
+  applyTargetBounds(bounds);
+  syncInputs();
   const m = metrics();
-  const candidates = generateCandidates();
   document.getElementById("frameRateOut").value = `${state.frameRate} Hz`;
   document.getElementById("rangeGateOut").value = `${fmt(state.rangeGate, 1)} m`;
   document.getElementById("maxVelocityTargetOut").value = `${fmt(state.maxVelocityTarget, 2)} m/s`;
@@ -506,6 +418,10 @@ function render() {
   document.getElementById("numLoopsOut").value = `${state.numLoops}`;
   document.getElementById("rangeThresholdOut").value = `${state.rangeThreshold} dB`;
   document.getElementById("dopplerThresholdOut").value = `${state.dopplerThreshold} dB`;
+  for (const [id, bound] of Object.entries(bounds)) {
+    const out = document.getElementById(`${id}Bounds`);
+    if (out) out.textContent = `${bound.text} (${fmt(Number(els[id].min), 3)} to ${fmt(Number(els[id].max), 3)})`;
+  }
 
   document.getElementById("velocityResolution").textContent = `${fmt(m.velocityResolution, 4)} m/s`;
   document.getElementById("maxVelocity").textContent = `${fmt(m.maxVelocity, 3)} m/s`;
@@ -513,14 +429,6 @@ function render() {
   document.getElementById("fftSpan").textContent = `${fmt(m.fftRangeSpan, 2)} m`;
   document.getElementById("activeTime").textContent = `${fmt(m.activeTime * 1000, 2)} ms`;
   document.getElementById("duty").textContent = `${fmt(m.duty * 100, 1)}%`;
-  document.getElementById("candidateSummary").textContent =
-    candidates.length ? `${candidates.length} viable configs` : "no exact match";
-  document.getElementById("candidateTable").innerHTML = candidateTable(candidates);
-  document.querySelectorAll("[data-candidate]").forEach((button) => {
-    button.addEventListener("click", () => {
-      applyCandidate(candidates[Number(button.dataset.candidate)]);
-    });
-  });
 
   const status = statusItems(m);
   document.getElementById("statusList").innerHTML = status
@@ -539,7 +447,6 @@ function updateStateFromInput(event) {
   const target = event.target;
   const id = target.id;
   if (id === "device") state.device = target.value;
-  else if (id === "priority") state.priority = target.value;
   else if (id === "usePushedMargin") state.usePushedMargin = target.checked;
   else if (id === "adcSamples") state.adcSamples = Number(target.value);
   else if (id in state) state[id] = Number(target.value);
