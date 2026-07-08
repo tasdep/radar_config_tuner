@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Radar Config Tuner</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <h1>Radar Config Tuner</h1>
+          <p>Velocity-first chirp tuning for TI 1843/6843 AOP demo configs.</p>
+        </div>
+        <div class="actions">
+          <button id="optimizeVelocity" type="button">Optimize Velocity</button>
+          <button id="copyConfig" type="button">Copy CFG</button>
+          <button id="downloadConfig" type="button">Download</button>
+        </div>
+      </header>
+
+      <section class="workspace">
+        <aside class="controls" aria-label="Radar tuning controls">
+          <section class="panel">
+            <h2>Device</h2>
+            <label class="field">
+              <span>Platform</span>
+              <select id="device">
+                <option value="6843">IWR6843AOP / 60 GHz</option>
+                <option value="1843">AWR1843AOP / 77 GHz</option>
+              </select>
+            </label>
+            <label class="toggle">
+              <input id="usePushedMargin" type="checkbox">
+              <span>Push close to timing margins</span>
+            </label>
+          </section>
+
+          <section class="panel">
+            <h2>Targets</h2>
+            <div class="slider-row">
+              <label for="frameRate">Frame rate</label>
+              <output id="frameRateOut"></output>
+              <input id="frameRate" type="range" min="1" max="30" step="1">
+            </div>
+            <div class="slider-row">
+              <label for="rangeGate">Output range gate</label>
+              <output id="rangeGateOut"></output>
+              <input id="rangeGate" type="range" min="2" max="30" step="0.1">
+            </div>
+            <div class="slider-row">
+              <label for="maxVelocityTarget">Max radial velocity</label>
+              <output id="maxVelocityTargetOut"></output>
+              <input id="maxVelocityTarget" type="range" min="0.5" max="8" step="0.01">
+            </div>
+            <div class="slider-row">
+              <label for="dutyLimit">Active chirp budget</label>
+              <output id="dutyLimitOut"></output>
+              <input id="dutyLimit" type="range" min="30" max="70" step="1">
+            </div>
+          </section>
+
+          <section class="panel">
+            <h2>Chirp</h2>
+            <label class="field">
+              <span>ADC samples</span>
+              <select id="adcSamples">
+                <option>64</option>
+                <option selected>128</option>
+                <option>256</option>
+              </select>
+            </label>
+            <div class="slider-row">
+              <label for="sampleRate">Sample rate</label>
+              <output id="sampleRateOut"></output>
+              <input id="sampleRate" type="range" min="2500" max="12500" step="1">
+            </div>
+            <div class="slider-row">
+              <label for="slope">Frequency slope</label>
+              <output id="slopeOut"></output>
+              <input id="slope" type="range" min="10" max="120" step="0.1">
+            </div>
+            <div class="slider-row">
+              <label for="idleTime">Idle time</label>
+              <output id="idleTimeOut"></output>
+              <input id="idleTime" type="range" min="10" max="300" step="1">
+            </div>
+            <div class="slider-row">
+              <label for="rampEndTime">Ramp end time</label>
+              <output id="rampEndTimeOut"></output>
+              <input id="rampEndTime" type="range" min="10" max="80" step="0.01">
+            </div>
+            <div class="slider-row">
+              <label for="numLoops">Frame loops</label>
+              <output id="numLoopsOut"></output>
+              <input id="numLoops" type="range" min="1" max="256" step="1">
+            </div>
+          </section>
+
+          <section class="panel">
+            <h2>Detection</h2>
+            <div class="slider-row">
+              <label for="rangeThreshold">Range threshold</label>
+              <output id="rangeThresholdOut"></output>
+              <input id="rangeThreshold" type="range" min="1" max="25" step="1">
+            </div>
+            <div class="slider-row">
+              <label for="dopplerThreshold">Doppler threshold</label>
+              <output id="dopplerThresholdOut"></output>
+              <input id="dopplerThreshold" type="range" min="1" max="25" step="1">
+            </div>
+          </section>
+        </aside>
+
+        <section class="main-area">
+          <section class="metrics" aria-label="Derived radar metrics">
+            <article class="metric">
+              <span>Velocity Resolution</span>
+              <strong id="velocityResolution">-</strong>
+            </article>
+            <article class="metric">
+              <span>Max Radial Velocity</span>
+              <strong id="maxVelocity">-</strong>
+            </article>
+            <article class="metric">
+              <span>Range Resolution</span>
+              <strong id="rangeResolution">-</strong>
+            </article>
+            <article class="metric">
+              <span>FFT Range Span</span>
+              <strong id="fftSpan">-</strong>
+            </article>
+            <article class="metric">
+              <span>Active Chirp Time</span>
+              <strong id="activeTime">-</strong>
+            </article>
+            <article class="metric">
+              <span>Duty</span>
+              <strong id="duty">-</strong>
+            </article>
+          </section>
+
+          <section class="panel status-panel">
+            <h2>Status</h2>
+            <div id="statusList" class="status-list"></div>
+          </section>
+
+          <section class="panel config-panel">
+            <div class="config-header">
+              <h2>Generated CFG</h2>
+              <span id="configName"></span>
+            </div>
+            <textarea id="configText" spellcheck="false"></textarea>
+          </section>
+        </section>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
