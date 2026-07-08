@@ -230,6 +230,49 @@ button:hover {
   gap: 14px;
 }
 
+.chirp-plot {
+  width: 100%;
+  height: auto;
+  min-height: 190px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fbfcfd;
+}
+
+.chirp-plot text {
+  fill: var(--muted);
+  font-size: 12px;
+}
+
+.plot-axis {
+  stroke: #83919d;
+  stroke-width: 1.4;
+}
+
+.plot-idle {
+  fill: #edf2f4;
+}
+
+.plot-adc {
+  fill: #dcebf6;
+}
+
+.plot-ramp {
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+
+.plot-marker {
+  stroke: #95a3ad;
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}
+
+.sample-ticks line {
+  stroke: #245f73;
+  stroke-width: 1;
+}
+
 .timing-row {
   display: grid;
   grid-template-columns: 92px minmax(0, 1fr);
@@ -297,6 +340,49 @@ button:hover {
   color: var(--muted);
   background: #fbfcfd;
   font-size: 12px;
+}
+
+.explainer-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(210px, 1fr));
+  gap: 10px;
+}
+
+.explainer-section {
+  border: 1px solid #e2e8ec;
+  border-radius: 6px;
+  background: #fbfcfd;
+  padding: 10px;
+}
+
+.explainer-section h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.explainer-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 5px 0;
+  border-top: 1px solid #edf2f4;
+  font-size: 12px;
+}
+
+.explainer-item:first-of-type {
+  border-top: 0;
+}
+
+.explainer-item span {
+  color: var(--muted);
+}
+
+.explainer-item strong {
+  color: var(--ink);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .status-item {
@@ -423,6 +509,10 @@ button:hover {
 
   .value-grid {
     grid-template-columns: repeat(2, minmax(150px, 1fr));
+  }
+
+  .explainer-grid {
+    grid-template-columns: 1fr;
   }
 }
 
