@@ -181,7 +181,7 @@ button:hover {
 .main-area {
   min-width: 0;
   display: grid;
-  grid-template-rows: auto auto minmax(360px, 1fr);
+  grid-template-rows: auto auto auto minmax(360px, 1fr);
   gap: 12px;
 }
 
@@ -275,6 +275,40 @@ button:hover {
   gap: 12px;
 }
 
+.config-header span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.value-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(170px, 1fr));
+  gap: 8px;
+}
+
+.value-item {
+  border: 1px solid #e2e8ec;
+  border-radius: 6px;
+  padding: 8px 9px;
+  background: #fbfcfd;
+}
+
+.value-item span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.value-item strong {
+  display: block;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ink);
+}
+
 #configName {
   color: var(--muted);
   font-size: 13px;
@@ -305,6 +339,10 @@ button:hover {
   .metrics {
     grid-template-columns: repeat(3, minmax(130px, 1fr));
   }
+
+  .value-grid {
+    grid-template-columns: repeat(2, minmax(150px, 1fr));
+  }
 }
 
 @media (max-width: 720px) {
@@ -323,5 +361,9 @@ button:hover {
 
   .metrics {
     grid-template-columns: repeat(2, minmax(120px, 1fr));
+  }
+
+  .value-grid {
+    grid-template-columns: 1fr;
   }
 }

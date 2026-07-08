@@ -250,6 +250,39 @@ function generateConfig(m) {
   return { name, text: lines.join("\n") + "\n" };
 }
 
+function liveValues(m) {
+  const device = currentDevice();
+  const frameMs = 1000 / state.frameRate;
+  const gate = Math.min(state.rangeGate, m.fftRangeSpan);
+  const dopplerGate = Math.min(state.maxVelocityTarget, m.maxVelocity);
+  const profileCfg =
+    `profileCfg 0 ${device.startFreqGHz} ${Math.round(state.idleTime)} 7 ` +
+    `${fmt(state.rampEndTime, 2).replace(/\.00$/, "")} 0 0 ` +
+    `${fmt(state.slope, 1).replace(/\.0$/, "")} 1 ${state.adcSamples} ` +
+    `${Math.round(state.sampleRate)} 0 0 ${device.rxGain}`;
+  const frameCfg =
+    `frameCfg 0 2 ${state.numLoops} 0 ${fmt(frameMs, 3).replace(/\.000$/, "")} 1 0`;
+
+  return [
+    ["Device", `${device.name} (${device.startFreqGHz} GHz)`],
+    ["profileCfg", profileCfg],
+    ["chirpCfg", "0/1/2 -> TX masks 1,2,4"],
+    ["frameCfg", frameCfg],
+    ["cfarFov range", `0 to ${fmt(gate, 2)} m`],
+    ["cfarFov Doppler", `-${fmt(dopplerGate, 2)} to ${fmt(dopplerGate, 2)} m/s`],
+    ["Range threshold", `${state.rangeThreshold} dB`],
+    ["Doppler threshold", `${state.dopplerThreshold} dB`],
+    ["ADC time", `${fmt(m.adcTime * 1e6, 3)} us`],
+    ["Bandwidth", `${fmt(m.bandwidth / 1e6, 1)} MHz`],
+    ["Center frequency", `${fmt(m.centerFreq / 1e9, 4)} GHz`],
+    ["Range bins", `${m.numRangeBins}`],
+    ["Chirp period", `${fmt(m.chirpPeriod * 1e6, 2)} us`],
+    ["Chirps/frame", `${m.chirpsPerFrame}`],
+    ["Frame period", `${fmt(frameMs, 3)} ms`],
+    ["Config filename", generateConfig(m).name],
+  ];
+}
+
 function syncInputs() {
   els.device.value = state.device;
   els.usePushedMargin.checked = state.usePushedMargin;
@@ -296,6 +329,9 @@ function render() {
   const cfg = generateConfig(m);
   document.getElementById("configName").textContent = cfg.name;
   document.getElementById("configText").value = cfg.text;
+  document.getElementById("liveValues").innerHTML = liveValues(m)
+    .map(([label, value]) => `<div class="value-item"><span>${label}</span><strong>${value}</strong></div>`)
+    .join("");
 }
 
 function updateStateFromInput(event) {
