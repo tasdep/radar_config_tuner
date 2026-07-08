@@ -181,7 +181,7 @@ button:hover {
 .main-area {
   min-width: 0;
   display: grid;
-  grid-template-rows: auto auto auto minmax(360px, 1fr);
+  grid-template-rows: auto auto auto auto minmax(360px, 1fr);
   gap: 12px;
 }
 
@@ -216,6 +216,72 @@ button:hover {
 .status-list {
   display: grid;
   gap: 8px;
+}
+
+.candidates-panel {
+  overflow: hidden;
+}
+
+.candidate-table {
+  overflow-x: auto;
+}
+
+.candidate-table table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 980px;
+  font-size: 13px;
+}
+
+.candidate-table th,
+.candidate-table td {
+  border-bottom: 1px solid #e7edf0;
+  padding: 9px 8px;
+  text-align: left;
+  vertical-align: middle;
+  font-variant-numeric: tabular-nums;
+}
+
+.candidate-table th {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  background: #f8fafb;
+}
+
+.candidate-table td:first-child strong,
+.candidate-table td:first-child span {
+  display: block;
+}
+
+.candidate-table td:first-child span {
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.candidate-table button {
+  min-height: 30px;
+  padding: 0 10px;
+  color: #f7fbfc;
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.selected-candidate {
+  background: #eef8fa;
+}
+
+.selected-candidate button {
+  color: var(--accent-dark);
+  background: #d8eef2;
+}
+
+.empty-candidates {
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+  padding: 14px;
+  color: var(--muted);
+  background: #fbfcfd;
 }
 
 .status-item {
