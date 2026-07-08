@@ -413,13 +413,6 @@ function timingGraphic(m) {
         <div class="chirp-ramp" style="width:${rampPct}%">ramp + ADC</div>
       </div>
     </div>
-    <div class="timing-legend">
-      <span>frame rate</span>
-      <span>loops</span>
-      <span>idle time</span>
-      <span>ramp end time</span>
-      <span>50% budget cap</span>
-    </div>
   `;
 }
 

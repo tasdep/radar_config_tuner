@@ -284,21 +284,6 @@ button:hover {
   background: #f3dfb7;
 }
 
-.timing-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.timing-legend span {
-  border: 1px solid #e2e8ec;
-  border-radius: 6px;
-  padding: 4px 7px;
-  color: var(--muted);
-  background: #fbfcfd;
-  font-size: 12px;
-}
-
 .explainer-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(210px, 1fr));
