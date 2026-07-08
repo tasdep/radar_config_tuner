@@ -225,6 +225,80 @@ button:hover {
   gap: 8px;
 }
 
+.timing-graphic {
+  display: grid;
+  gap: 14px;
+}
+
+.timing-row {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.timing-row > span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.frame-track,
+.chirp-track {
+  display: flex;
+  height: 38px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f5f8f9;
+}
+
+.frame-active,
+.frame-unused,
+.chirp-idle,
+.chirp-ramp {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 72px;
+  padding: 0 8px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.frame-active {
+  background: #bfe3e9;
+}
+
+.frame-unused {
+  background: #edf2f4;
+  color: var(--muted);
+}
+
+.chirp-idle {
+  background: #dcebf6;
+}
+
+.chirp-ramp {
+  background: #f3dfb7;
+}
+
+.timing-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.timing-legend span {
+  border: 1px solid #e2e8ec;
+  border-radius: 6px;
+  padding: 4px 7px;
+  color: var(--muted);
+  background: #fbfcfd;
+  font-size: 12px;
+}
+
 .status-item {
   display: flex;
   align-items: center;

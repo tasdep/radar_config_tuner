@@ -38,12 +38,10 @@ const state = {
   numLoops: 80,
   rangeThreshold: 15,
   dopplerThreshold: 15,
-  usePushedMargin: false,
 };
 
 const ids = [
   "device",
-  "usePushedMargin",
   "frameRate",
   "rangeGate",
   "maxVelocityTarget",
@@ -59,6 +57,17 @@ const ids = [
   "rangeThreshold",
   "dopplerThreshold",
 ];
+
+const targetIds = new Set([
+  "device",
+  "frameRate",
+  "rangeGate",
+  "maxVelocityTarget",
+  "velocityResolutionTarget",
+  "rangeResolutionTarget",
+  "dutyLimit",
+  "adcSamples",
+]);
 
 const els = Object.fromEntries(ids.map((id) => [id, document.getElementById(id)]));
 
@@ -126,9 +135,7 @@ function metrics() {
 }
 
 function dutyBudget() {
-  return state.usePushedMargin
-    ? Math.min(state.dutyLimit + 2, 55)
-    : state.dutyLimit;
+  return Math.min(state.dutyLimit, 50);
 }
 
 function targetBounds() {
@@ -180,8 +187,8 @@ function targetBounds() {
       text: `output range needs at least ${fmt(minRangeResolutionForGate, 3)} m with ${adcBins} bins`,
     },
     dutyLimit: {
-      min: Math.max(30, Math.min(70, minDutyPercent)),
-      max: 70,
+      min: Math.max(30, Math.min(50, minDutyPercent)),
+      max: 50,
       text: `current speed target needs about ${minDutyPercent}% active chirp time`,
     },
   };
@@ -202,7 +209,7 @@ function applyTargetBounds(bounds) {
   }
 }
 
-function optimizeVelocity() {
+function solveTargets() {
   const device = currentDevice();
   const sampleRateHz = state.sampleRate * 1000;
   const adcTimeUs = state.adcSamples / sampleRateHz * 1e6;
@@ -211,7 +218,7 @@ function optimizeVelocity() {
     C * sampleRateHz / (2 * state.rangeGate * 1e12);
   const slopeForResolution =
     C * sampleRateHz / (2 * state.adcSamples * state.rangeResolutionTarget * 1e12);
-  state.slope = Math.max(10, Math.min(120, Math.min(maxSlopeForRange, slopeForResolution)));
+  state.slope = Math.max(10, Math.min(120, Math.min(maxSlopeForRange, Math.max(10, slopeForResolution))));
   state.rampEndTime = Math.max(minRamp, Math.min(80, state.rampEndTime));
 
   const slopeHzPerS = state.slope * 1e12;
@@ -227,8 +234,11 @@ function optimizeVelocity() {
   const loopsForResolution =
     C / (2 * centerFreq * (state.idleTime + state.rampEndTime) * 1e-6 * NUM_TX * state.velocityResolutionTarget);
   const maxLoops = Math.floor(budgetUs / (NUM_TX * (state.idleTime + state.rampEndTime)));
-  state.numLoops = Math.max(1, Math.min(256, Math.floor(Math.min(maxLoops, Math.max(loopsForResolution, 1)))));
+  state.numLoops = Math.max(1, Math.min(256, Math.floor(Math.min(maxLoops, Math.max(Math.ceil(loopsForResolution), 1)))));
+}
 
+function optimizeVelocity() {
+  solveTargets();
   syncInputs();
   render();
 }
@@ -381,9 +391,40 @@ function liveValues(m) {
   ];
 }
 
+function timingGraphic(m) {
+  const activePct = Math.max(1, Math.min(100, m.duty * 100));
+  const unusedPct = Math.max(0, 100 - activePct);
+  const chirpUs = m.chirpPeriod * 1e6;
+  const idlePct = Math.max(6, Math.min(94, state.idleTime / chirpUs * 100));
+  const rampPct = Math.max(6, 100 - idlePct);
+
+  return `
+    <div class="timing-row">
+      <span>Frame</span>
+      <div class="frame-track">
+        <div class="frame-active" style="width:${activePct}%">active chirps</div>
+        <div class="frame-unused" style="width:${unusedPct}%">unused frame</div>
+      </div>
+    </div>
+    <div class="timing-row">
+      <span>One chirp</span>
+      <div class="chirp-track">
+        <div class="chirp-idle" style="width:${idlePct}%">idle</div>
+        <div class="chirp-ramp" style="width:${rampPct}%">ramp + ADC</div>
+      </div>
+    </div>
+    <div class="timing-legend">
+      <span>frame rate</span>
+      <span>loops</span>
+      <span>idle time</span>
+      <span>ramp end time</span>
+      <span>50% budget cap</span>
+    </div>
+  `;
+}
+
 function syncInputs() {
   els.device.value = state.device;
-  els.usePushedMargin.checked = state.usePushedMargin;
   els.frameRate.value = state.frameRate;
   els.rangeGate.value = state.rangeGate;
   els.maxVelocityTarget.value = state.maxVelocityTarget;
@@ -429,6 +470,7 @@ function render() {
   document.getElementById("fftSpan").textContent = `${fmt(m.fftRangeSpan, 2)} m`;
   document.getElementById("activeTime").textContent = `${fmt(m.activeTime * 1000, 2)} ms`;
   document.getElementById("duty").textContent = `${fmt(m.duty * 100, 1)}%`;
+  document.getElementById("timingGraphic").innerHTML = timingGraphic(m);
 
   const status = statusItems(m);
   document.getElementById("statusList").innerHTML = status
@@ -447,9 +489,9 @@ function updateStateFromInput(event) {
   const target = event.target;
   const id = target.id;
   if (id === "device") state.device = target.value;
-  else if (id === "usePushedMargin") state.usePushedMargin = target.checked;
   else if (id === "adcSamples") state.adcSamples = Number(target.value);
   else if (id in state) state[id] = Number(target.value);
+  if (targetIds.has(id)) solveTargets();
   render();
 }
 
@@ -481,5 +523,6 @@ document.getElementById("optimizeVelocity").addEventListener("click", optimizeVe
 document.getElementById("downloadConfig").addEventListener("click", downloadConfig);
 document.getElementById("copyConfig").addEventListener("click", copyConfig);
 
+solveTargets();
 syncInputs();
 render();
