@@ -31,6 +31,10 @@ This is not a replacement for TI validation. Use it to explore the coupled
 chirp/frame trade space quickly, then load the generated config into TI's tool
 and finally onto hardware.
 
+Checker:
+
+- TI mmWave Sensing Estimator 2.5.1: https://dev.ti.com/gallery/view/mmwave/mmWaveSensingEstimator/ver/2.5.1/
+
 The current model assumes:
 
 - SDK 3.x demo config syntax
