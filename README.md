@@ -3,6 +3,8 @@
 Small static GUI for tuning TI mmWave SDK 3.x demo configs for the AWR1843AOP
 and IWR6843AOP boards.
 
+[Open the hosted Radar Config Tuner](https://tasdep.github.io/radar_config_tuner/).
+
 The tool is intentionally simple:
 
 - velocity-first optimizer for frame rate, range gate, and max radial velocity
