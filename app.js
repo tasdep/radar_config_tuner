@@ -627,7 +627,14 @@ ids.forEach((id) => {
 document.getElementById("optimizeVelocity").addEventListener("click", optimizeVelocity);
 document.getElementById("downloadConfig").addEventListener("click", downloadConfig);
 document.getElementById("copyConfig").addEventListener("click", copyConfig);
-document.getElementById("timingDetails").addEventListener("toggle", () => renderDetailedTiming(metrics()));
+document.getElementById("timingDetails").addEventListener("toggle", (event) => {
+  const details = event.currentTarget;
+  details.querySelector("summary").textContent = details.open
+    ? "Hide chirps and frames"
+    : "Show chirps and frames";
+  renderDetailedTiming(metrics());
+  if (details.open) details.scrollIntoView({ behavior: "smooth", block: "start" });
+});
 
 solveTargets();
 syncInputs();
