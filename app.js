@@ -416,6 +416,60 @@ function timingGraphic(m) {
   `;
 }
 
+function detailedTiming(m) {
+  const chirpUs = m.chirpPeriod * 1e6;
+  const frameMs = m.framePeriod * 1000;
+  const activeMs = m.activeTime * 1000;
+  const adcUs = m.adcTime * 1e6;
+  const rows = [];
+  for (let loop = 0; loop < state.numLoops; loop++) {
+    for (let tx = 0; tx < NUM_TX; tx++) {
+      const index = loop * NUM_TX + tx;
+      const startUs = index * chirpUs;
+      const rampStartUs = startUs + state.idleTime;
+      const adcStartUs = rampStartUs + 7;
+      rows.push(`
+        <tr>
+          <td>${index + 1}</td>
+          <td>${loop + 1}</td>
+          <td>${tx}</td>
+          <td><span class="tx-tag tx-${tx + 1}">TX${tx + 1}</span></td>
+          <td>${fmt(startUs / 1000, 4)}</td>
+          <td>${fmt(rampStartUs / 1000, 4)}</td>
+          <td>${fmt(adcStartUs / 1000, 4)}–${fmt((adcStartUs + adcUs) / 1000, 4)}</td>
+          <td>${fmt((startUs + chirpUs) / 1000, 4)}</td>
+        </tr>
+      `);
+    }
+  }
+
+  return `
+    <div class="frame-sequence" aria-label="Two consecutive frames">
+      <div><strong>Frame 1</strong><span>0–${fmt(frameMs, 3)} ms</span><small>${m.chirpsPerFrame} chirps through ${fmt(activeMs, 3)} ms, then frame gap</small></div>
+      <div><strong>Frame 2</strong><span>${fmt(frameMs, 3)}–${fmt(frameMs * 2, 3)} ms</span><small>same chirp sequence repeats</small></div>
+    </div>
+    <div class="loop-pattern">
+      <strong>Each loop</strong>
+      <span class="tx-tag tx-1">chirp 0 · TX1</span>
+      <span class="tx-tag tx-2">chirp 1 · TX2</span>
+      <span class="tx-tag tx-3">chirp 2 · TX3</span>
+      <span>× ${state.numLoops} loops = ${m.chirpsPerFrame} chirps/frame</span>
+    </div>
+    <p class="timing-note">Times below are offsets from the start of frame 1. The ADC window starts 7 µs into each ramp; one chirp lasts ${fmt(chirpUs, 2)} µs.</p>
+    <div class="chirp-table-scroll">
+      <table class="chirp-table">
+        <thead><tr><th scope="col">#</th><th scope="col">Loop</th><th scope="col">chirpCfg</th><th scope="col">TX</th><th scope="col">Start ms</th><th scope="col">Ramp starts ms</th><th scope="col">ADC window ms</th><th scope="col">End ms</th></tr></thead>
+        <tbody>${rows.join("")}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderDetailedTiming(m) {
+  const details = document.getElementById("timingDetails");
+  if (details.open) document.getElementById("timingDetailsContent").innerHTML = detailedTiming(m);
+}
+
 function cfgExplainer(m) {
   const device = currentDevice();
   const frameMs = 1000 / state.frameRate;
@@ -518,6 +572,7 @@ function render() {
   document.getElementById("activeTime").textContent = `${fmt(m.activeTime * 1000, 2)} ms`;
   document.getElementById("duty").textContent = `${fmt(m.duty * 100, 1)}%`;
   document.getElementById("timingGraphic").innerHTML = timingGraphic(m);
+  renderDetailedTiming(m);
   document.getElementById("plotSummary").textContent =
     `${state.adcSamples} samples, ${m.numRangeBins} bins, ${m.chirpsPerFrame} chirps/frame`;
   document.getElementById("cfgExplainer").innerHTML = cfgExplainer(m);
@@ -572,6 +627,7 @@ ids.forEach((id) => {
 document.getElementById("optimizeVelocity").addEventListener("click", optimizeVelocity);
 document.getElementById("downloadConfig").addEventListener("click", downloadConfig);
 document.getElementById("copyConfig").addEventListener("click", copyConfig);
+document.getElementById("timingDetails").addEventListener("toggle", () => renderDetailedTiming(metrics()));
 
 solveTargets();
 syncInputs();
