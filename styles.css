@@ -304,6 +304,117 @@ button:hover,
   gap: 14px;
 }
 
+.timing-details {
+  margin-top: 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.timing-details summary {
+  width: fit-content;
+  color: var(--accent-dark);
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.timing-details summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+#timingDetailsContent {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.frame-sequence {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.frame-sequence > div {
+  display: grid;
+  gap: 3px;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: 5px;
+  background: #f7fafb;
+  font-size: 12px;
+}
+
+.frame-sequence small,
+.timing-note {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.loop-pattern {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+}
+
+.loop-pattern > strong {
+  margin-right: 4px;
+}
+
+.tx-tag {
+  display: inline-block;
+  border-radius: 4px;
+  padding: 3px 6px;
+  color: var(--ink);
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.tx-1 { background: #cce8ed; }
+.tx-2 { background: #dcebf6; }
+.tx-3 { background: #f3dfb7; }
+
+.timing-note {
+  margin: 0;
+}
+
+.chirp-table-scroll {
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.chirp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.chirp-table th,
+.chirp-table td {
+  padding: 6px 9px;
+  border-bottom: 1px solid #e9eef1;
+  text-align: left;
+}
+
+.chirp-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #eef4f6;
+}
+
+.chirp-table tbody tr:nth-child(even) {
+  background: #f8fafb;
+}
+
 .timing-row {
   display: grid;
   grid-template-columns: 92px minmax(0, 1fr);
@@ -559,6 +670,10 @@ button:hover,
   }
 
   .value-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .frame-sequence {
     grid-template-columns: 1fr;
   }
 }
