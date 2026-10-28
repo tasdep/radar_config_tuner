@@ -416,52 +416,103 @@ function timingGraphic(m) {
   `;
 }
 
-function detailedTiming(m) {
+let timingLoopStart = 1;
+
+function zoomedTiming(m) {
+  const visibleLoops = Math.min(3, state.numLoops);
+  const maxStart = Math.max(1, state.numLoops - visibleLoops + 1);
+  timingLoopStart = Math.min(timingLoopStart, maxStart);
   const chirpUs = m.chirpPeriod * 1e6;
-  const frameMs = m.framePeriod * 1000;
-  const activeMs = m.activeTime * 1000;
   const adcUs = m.adcTime * 1e6;
-  const rows = [];
-  for (let loop = 0; loop < state.numLoops; loop++) {
+  const plotX = 75;
+  const plotWidth = 900;
+  const chirpWidth = plotWidth / (visibleLoops * NUM_TX);
+  const colors = ["#43a6b5", "#78a9d2", "#e5ad57"];
+  const marks = [];
+  for (let lane = 0; lane < NUM_TX; lane++) {
+    const y = 43 + lane * 47;
+    marks.push(`<text x="10" y="${y + 18}" class="graph-label">TX${lane + 1}</text>`);
+    marks.push(`<line x1="${plotX}" x2="975" y1="${y + 25}" y2="${y + 25}" class="graph-guide"/>`);
+  }
+  for (let loop = 0; loop < visibleLoops; loop++) {
+    const loopNumber = timingLoopStart + loop;
+    const loopX = plotX + loop * NUM_TX * chirpWidth;
+    marks.push(`<line x1="${loopX}" x2="${loopX}" y1="38" y2="180" class="graph-loop-line"/>`);
+    marks.push(`<text x="${loopX + 1.5 * chirpWidth}" y="205" text-anchor="middle" class="graph-label">Loop ${loopNumber}</text>`);
     for (let tx = 0; tx < NUM_TX; tx++) {
-      const index = loop * NUM_TX + tx;
-      const startUs = index * chirpUs;
-      const rampStartUs = startUs + state.idleTime;
-      const adcStartUs = rampStartUs + 7;
-      rows.push(`
-        <tr>
-          <td>${index + 1}</td>
-          <td>${loop + 1}</td>
-          <td>${tx}</td>
-          <td><span class="tx-tag tx-${tx + 1}">TX${tx + 1}</span></td>
-          <td>${fmt(startUs / 1000, 4)}</td>
-          <td>${fmt(rampStartUs / 1000, 4)}</td>
-          <td>${fmt(adcStartUs / 1000, 4)}–${fmt((adcStartUs + adcUs) / 1000, 4)}</td>
-          <td>${fmt((startUs + chirpUs) / 1000, 4)}</td>
-        </tr>
-      `);
+      const chirpNumber = (loopNumber - 1) * NUM_TX + tx + 1;
+      const x = loopX + tx * chirpWidth;
+      const y = 43 + tx * 47;
+      const idleWidth = chirpWidth * state.idleTime / chirpUs;
+      const adcX = x + chirpWidth * (state.idleTime + 7) / chirpUs;
+      const adcWidth = chirpWidth * adcUs / chirpUs;
+      const startMs = (chirpNumber - 1) * chirpUs / 1000;
+      marks.push(`
+        <g>
+          <title>Chirp ${chirpNumber}, TX${tx + 1}: ${fmt(startMs, 4)}–${fmt(startMs + chirpUs / 1000, 4)} ms; ADC ${fmt(startMs + (state.idleTime + 7) / 1000, 4)}–${fmt(startMs + (state.idleTime + 7 + adcUs) / 1000, 4)} ms</title>
+          <rect x="${x}" y="${y}" width="${idleWidth}" height="25" fill="#e2e9ed"/>
+          <rect x="${x + idleWidth}" y="${y}" width="${chirpWidth - idleWidth}" height="25" fill="${colors[tx]}"/>
+          <rect x="${adcX}" y="${y + 17}" width="${adcWidth}" height="8" fill="#17343d"/>
+          <text x="${x + chirpWidth / 2}" y="${y - 5}" text-anchor="middle" class="graph-label">#${chirpNumber}</text>
+        </g>`);
     }
   }
+  marks.push(`<line x1="975" x2="975" y1="38" y2="180" class="graph-loop-line"/>`);
+  const startMs = (timingLoopStart - 1) * NUM_TX * chirpUs / 1000;
+  const endMs = (timingLoopStart - 1 + visibleLoops) * NUM_TX * chirpUs / 1000;
+  return `
+    <svg class="timing-svg" viewBox="0 0 1000 220" role="img" aria-label="Chirps ${((timingLoopStart - 1) * NUM_TX) + 1} through ${(timingLoopStart - 1 + visibleLoops) * NUM_TX}, with idle, ramp, and ADC intervals on separate TX lanes">
+      ${marks.join("")}
+      <text x="75" y="219" class="graph-label">${fmt(startMs, 3)} ms</text>
+      <text x="975" y="219" text-anchor="end" class="graph-label">${fmt(endMs, 3)} ms</text>
+    </svg>`;
+}
+
+function detailedTiming(m) {
+  const frameMs = m.framePeriod * 1000;
+  const chirpMs = m.chirpPeriod * 1000;
+  const frameWidth = 440;
+  const chirpWidth = chirpMs / frameMs * frameWidth;
+  const colors = ["#43a6b5", "#78a9d2", "#e5ad57"];
+  const chirps = [];
+  for (let index = 0; index < m.chirpsPerFrame; index++) {
+    chirps.push(`<rect x="${index * chirpWidth}" y="0" width="${chirpWidth}" height="26" fill="${colors[index % NUM_TX]}"/>`);
+  }
+  const visibleLoops = Math.min(3, state.numLoops);
+  const maxStart = Math.max(1, state.numLoops - visibleLoops + 1);
+  timingLoopStart = Math.min(timingLoopStart, maxStart);
 
   return `
-    <div class="frame-sequence" aria-label="Two consecutive frames">
-      <div><strong>Frame 1</strong><span>0–${fmt(frameMs, 3)} ms</span><small>${m.chirpsPerFrame} chirps through ${fmt(activeMs, 3)} ms, then frame gap</small></div>
-      <div><strong>Frame 2</strong><span>${fmt(frameMs, 3)}–${fmt(frameMs * 2, 3)} ms</span><small>same chirp sequence repeats</small></div>
+    <div class="graph-legend" aria-label="TX color legend">
+      <span><i class="legend-tx1"></i>TX1</span>
+      <span><i class="legend-tx2"></i>TX2</span>
+      <span><i class="legend-tx3"></i>TX3</span>
+      <span><i class="legend-idle"></i>Idle</span>
+      <span><i class="legend-adc"></i>ADC capture</span>
     </div>
-    <div class="loop-pattern">
-      <strong>Each loop</strong>
-      <span class="tx-tag tx-1">chirp 0 · TX1</span>
-      <span class="tx-tag tx-2">chirp 1 · TX2</span>
-      <span class="tx-tag tx-3">chirp 2 · TX3</span>
-      <span>× ${state.numLoops} loops = ${m.chirpsPerFrame} chirps/frame</span>
+    <div class="timing-graph-scroll">
+      <svg class="timing-svg" viewBox="0 0 1000 150" role="img" aria-label="Two frames, each with ${m.chirpsPerFrame} individual TX chirps followed by unused frame time">
+        <defs><g id="frameChirps">${chirps.join("")}</g></defs>
+        <text x="60" y="20" class="graph-title">Frame 1 · 0–${fmt(frameMs, 3)} ms</text>
+        <text x="530" y="20" class="graph-title">Frame 2 · ${fmt(frameMs, 3)}–${fmt(frameMs * 2, 3)} ms</text>
+        <rect x="60" y="36" width="${frameWidth}" height="26" class="graph-frame"/>
+        <rect x="530" y="36" width="${frameWidth}" height="26" class="graph-frame"/>
+        <use href="#frameChirps" x="60" y="36"/>
+        <use href="#frameChirps" x="530" y="36"/>
+        <text x="60" y="89" class="graph-label">${m.chirpsPerFrame} chirps · ${fmt(m.activeTime * 1000, 3)} ms active</text>
+        <text x="530" y="89" class="graph-label">sequence repeats every ${fmt(frameMs, 3)} ms</text>
+        <line x1="60" y1="111" x2="970" y2="111" class="graph-guide"/>
+        <text x="60" y="130" class="graph-label">0</text>
+        <text x="500" y="130" text-anchor="end" class="graph-label">${fmt(frameMs, 2)} ms</text>
+        <text x="970" y="130" text-anchor="end" class="graph-label">${fmt(frameMs * 2, 2)} ms</text>
+      </svg>
     </div>
-    <p class="timing-note">Times below are offsets from the start of frame 1. The ADC window starts 7 µs into each ramp; one chirp lasts ${fmt(chirpUs, 2)} µs.</p>
-    <div class="chirp-table-scroll">
-      <table class="chirp-table">
-        <thead><tr><th scope="col">#</th><th scope="col">Loop</th><th scope="col">chirpCfg</th><th scope="col">TX</th><th scope="col">Start ms</th><th scope="col">Ramp starts ms</th><th scope="col">ADC window ms</th><th scope="col">End ms</th></tr></thead>
-        <tbody>${rows.join("")}</tbody>
-      </table>
+    <div class="zoom-control">
+      <label for="timingLoop">Zoom into loops <strong id="timingLoopLabel">${timingLoopStart}–${timingLoopStart + visibleLoops - 1} of ${state.numLoops}</strong></label>
+      <input id="timingLoop" type="range" min="1" max="${maxStart}" value="${timingLoopStart}" step="1" ${maxStart === 1 ? "disabled" : ""}>
     </div>
+    <div id="zoomGraph" class="timing-graph-scroll">${zoomedTiming(m)}</div>
+    <p class="timing-note">Each band shows one chirp: gray idle time, colored ramp, and dark ADC capture. Hover over a chirp for exact times. The zoom view shows ${visibleLoops} loop${visibleLoops === 1 ? "" : "s"} at a time.</p>
   `;
 }
 
@@ -634,6 +685,14 @@ document.getElementById("timingDetails").addEventListener("toggle", (event) => {
     : "Show chirps and frames";
   renderDetailedTiming(metrics());
   if (details.open) details.scrollIntoView({ behavior: "smooth", block: "start" });
+});
+document.getElementById("timingDetailsContent").addEventListener("input", (event) => {
+  if (event.target.id !== "timingLoop") return;
+  timingLoopStart = Number(event.target.value);
+  const visibleLoops = Math.min(3, state.numLoops);
+  document.getElementById("timingLoopLabel").textContent =
+    `${timingLoopStart}–${timingLoopStart + visibleLoops - 1} of ${state.numLoops}`;
+  document.getElementById("zoomGraph").innerHTML = zoomedTiming(metrics());
 });
 
 solveTargets();

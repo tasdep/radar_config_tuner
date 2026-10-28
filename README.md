@@ -10,7 +10,7 @@ The tool is intentionally simple:
 - velocity-first optimizer for frame rate, range gate, and max radial velocity
 - live sliders for chirp/frame/CFAR values
 - derived range and Doppler metrics
-- expandable chirp/frame schedule with per-chirp TX and ADC timing
+- expandable chirp/frame graphs with a loop zoom control and ADC timing
 - generated `.cfg` text for manual validation in TI mmWave Demo Visualizer
 - upload a `.cfg` file to see its derived range, velocity, frame, and detection stats
 
