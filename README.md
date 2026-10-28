@@ -11,13 +11,22 @@ The tool is intentionally simple:
 - live sliders for chirp/frame/CFAR values
 - derived range and Doppler metrics
 - generated `.cfg` text for manual validation in TI mmWave Demo Visualizer
+- upload a `.cfg` file to see its derived range, velocity, frame, and detection stats
+
+Use **Upload CFG** to analyze a local TI mmWave SDK 3.x demo config. The
+analysis is read-only and runs in the browser; it does not change the tuner
+sliders or send the file to a server. It supports 60 GHz and 77 GHz regular
+`frameCfg` setups with one chirp per distinct TX antenna in each TDM loop.
+Configs using advanced frames, simultaneous TX, or chirp profile variations
+show an explicit error instead of an unreliable estimate. Uploaded values are
+estimates and should still be checked in TI's tools and on hardware.
 
 ## Run
 
 Open `index.html` directly in a browser, or serve the folder:
 
 ```bash
-cd /home/tas/thesis/radar_config_tuner
+cd radar_config_tuner
 python3 -m http.server 8765
 ```
 

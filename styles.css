@@ -31,6 +31,10 @@ textarea {
   font: inherit;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 .app-shell {
   min-height: 100vh;
   display: flex;
@@ -68,7 +72,8 @@ textarea {
   justify-content: flex-end;
 }
 
-button {
+button,
+.upload-button {
   min-height: 36px;
   border: 1px solid #d2e3e7;
   border-radius: 6px;
@@ -79,9 +84,28 @@ button {
   box-shadow: none;
 }
 
-button:hover {
+button:hover,
+.upload-button:hover {
   border-color: #ffffff;
   background: #ffffff;
+}
+
+.upload-button {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+}
+
+.upload-button:focus-within {
+  outline: 2px solid #8ed5e1;
+  outline-offset: 2px;
+}
+
+.upload-button input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
 }
 
 .workspace {
@@ -192,10 +216,60 @@ button:hover {
   gap: 12px;
 }
 
+.tuner-heading {
+  margin: 4px 0 0;
+  font-size: 15px;
+}
+
+.tuner-heading small {
+  margin-left: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
 .metrics {
   display: grid;
   grid-template-columns: repeat(6, minmax(130px, 1fr));
   gap: 10px;
+}
+
+.uploaded-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.uploaded-panel .config-header h2 {
+  margin-bottom: 0;
+}
+
+.uploaded-panel > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.uploaded-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.uploaded-metrics .metric small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.upload-warnings p {
+  margin: 0 0 6px;
+  padding: 9px 10px;
+  border: 1px solid #f1d396;
+  border-radius: 6px;
+  background: #fff8e8;
+  color: var(--ink);
+  font-size: 13px;
 }
 
 .metric {
@@ -449,6 +523,10 @@ button:hover {
     grid-template-columns: repeat(3, minmax(130px, 1fr));
   }
 
+  .uploaded-metrics {
+    grid-template-columns: repeat(2, minmax(130px, 1fr));
+  }
+
   .value-grid {
     grid-template-columns: repeat(2, minmax(150px, 1fr));
   }
@@ -474,6 +552,10 @@ button:hover {
 
   .metrics {
     grid-template-columns: repeat(2, minmax(120px, 1fr));
+  }
+
+  .uploaded-metrics {
+    grid-template-columns: 1fr;
   }
 
   .value-grid {

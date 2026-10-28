@@ -1,0 +1,208 @@
+// Read-only analysis of SDK 3.x frame configs with one TDM chirp per TX.
+const CONFIG_SPEED_OF_LIGHT = 299792458;
+
+function analyzeConfig(text) {
+  const commands = new Map();
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.split(/[%#]/, 1)[0].trim();
+    if (!line) continue;
+    const parts = line.split(/\s+/);
+    const name = parts.shift();
+    if (!commands.has(name)) commands.set(name, []);
+    commands.get(name).push(parts);
+  }
+
+  const rows = (name) => commands.get(name) || [];
+  const number = (value, label, { min = -Infinity, integer = false } = {}) => {
+    const n = Number(value);
+    if (value === undefined || !Number.isFinite(n) || n <= min || (integer && !Number.isInteger(n))) {
+      throw new Error(`Invalid or missing ${label}.`);
+    }
+    return n;
+  };
+  const one = (name) => {
+    if (rows(name).length !== 1) throw new Error(`Expected one ${name} command; found ${rows(name).length}.`);
+    return rows(name)[0];
+  };
+
+  const frame = one("frameCfg");
+  const startChirp = number(frame[0], "frameCfg start chirp", { min: -1, integer: true });
+  const endChirp = number(frame[1], "frameCfg end chirp", { min: -1, integer: true });
+  if (endChirp < startChirp || endChirp - startChirp > 255) {
+    throw new Error("frameCfg chirp range is invalid or too large.");
+  }
+  const loops = number(frame[2], "frameCfg loops", { min: 0, integer: true });
+  const frameMs = number(frame[4], "frameCfg frame period", { min: 0 });
+  const chirpDefinitions = rows("chirpCfg");
+  if (!chirpDefinitions.length) throw new Error("No chirpCfg commands found.");
+  const sequence = [];
+  for (let chirp = startChirp; chirp <= endChirp; chirp++) {
+    const matches = chirpDefinitions.filter((row) => {
+      const first = number(row[0], "chirpCfg start index", { min: -1, integer: true });
+      const last = number(row[1], "chirpCfg end index", { min: -1, integer: true });
+      return first <= chirp && chirp <= last;
+    });
+    if (matches.length !== 1) throw new Error(`Frame chirp ${chirp} must have exactly one chirpCfg definition.`);
+    const row = matches[0];
+    const profileId = number(row[2], "chirpCfg profile ID", { min: -1, integer: true });
+    const txMask = number(row[7], "chirpCfg TX mask", { min: 0, integer: true });
+    if ((txMask & (txMask - 1)) !== 0) {
+      throw new Error("Analysis supports one TX antenna per chirp (TDM-MIMO). Multiple simultaneous TX antennas were found.");
+    }
+    if (row.slice(3, 7).some((v) => Number(v) !== 0)) {
+      throw new Error("Analysis does not support chirpCfg profile variations (start frequency, slope, idle time, or ADC start time).");
+    }
+    sequence.push({ profileId, txMask });
+  }
+  if (new Set(sequence.map((item) => item.profileId)).size !== 1 ||
+      new Set(sequence.map((item) => item.txMask)).size !== sequence.length) {
+    throw new Error("Analysis requires one profile and one chirp per distinct TX antenna in each loop.");
+  }
+
+  const matchingProfiles = rows("profileCfg").filter((row) => Number(row[0]) === sequence[0].profileId);
+  if (matchingProfiles.length !== 1) throw new Error(`Expected one profileCfg for profile ${sequence[0].profileId}.`);
+  const profile = matchingProfiles[0];
+  const startGHz = number(profile[1], "profileCfg start frequency", { min: 0 });
+  if (!((startGHz >= 57 && startGHz <= 64) || (startGHz >= 76 && startGHz <= 81))) {
+    throw new Error("Only 60 GHz and 77 GHz TI mmWave profiles are supported.");
+  }
+  const idleUs = number(profile[2], "profileCfg idle time", { min: -1 });
+  const adcStartUs = number(profile[3], "profileCfg ADC start time", { min: -1 });
+  const rampUs = number(profile[4], "profileCfg ramp end time", { min: 0 });
+  const slopeMHzUs = number(profile[7], "profileCfg frequency slope", { min: 0 });
+  const samples = number(profile[9], "profileCfg ADC samples", { min: 0, integer: true });
+  const sampleRateKsps = number(profile[10], "profileCfg sample rate", { min: 0 });
+  const txCount = sequence.length;
+  const rangeBins = 2 ** Math.ceil(Math.log2(samples));
+  const adcSeconds = samples / (sampleRateKsps * 1000);
+  const slopeHzS = slopeMHzUs * 1e12;
+  const bandwidthHz = slopeHzS * adcSeconds;
+  const chirpSeconds = (idleUs + rampUs) * 1e-6;
+  const centerHz = startGHz * 1e9 + slopeHzS * (adcStartUs * 1e-6 + adcSeconds / 2);
+  const chirpsPerFrame = txCount * loops;
+  const activeMs = chirpsPerFrame * chirpSeconds * 1000;
+  const rangeResolutionM = CONFIG_SPEED_OF_LIGHT / (2 * bandwidthHz);
+  const rangeBinM = CONFIG_SPEED_OF_LIGHT * sampleRateKsps * 1000 / (2 * slopeHzS * rangeBins);
+  const maxVelocityMs = CONFIG_SPEED_OF_LIGHT / (4 * centerHz * chirpSeconds * txCount);
+  const velocityResolutionMs = CONFIG_SPEED_OF_LIGHT / (2 * centerHz * chirpSeconds * chirpsPerFrame);
+
+  const fov = {};
+  for (const row of rows("cfarFovCfg")) {
+    const type = Number(row[1]);
+    if (type === 0 || type === 1) {
+      const low = Number(row[2]);
+      const high = Number(row[3]);
+      if (Number.isFinite(low) && Number.isFinite(high)) fov[type] = [low, high];
+    }
+  }
+  const thresholds = {};
+  for (const row of rows("cfarCfg")) {
+    const type = Number(row[1]);
+    const threshold = Number(row[7]);
+    if ((type === 0 || type === 1) && Number.isFinite(threshold)) thresholds[type] = threshold;
+  }
+  const warnings = [];
+  if (adcStartUs + adcSeconds * 1e6 > rampUs) warnings.push("ADC capture extends beyond the ramp end time.");
+  if (activeMs > frameMs) warnings.push("Active chirps exceed the configured frame period.");
+  if (fov[0] && (fov[0][0] < 0 || fov[0][1] > rangeBinM * rangeBins)) {
+    warnings.push("Range FoV extends beyond the calculated FFT range span.");
+  }
+  if (fov[1] && Math.max(Math.abs(fov[1][0]), Math.abs(fov[1][1])) > maxVelocityMs) {
+    warnings.push("Doppler FoV extends beyond the calculated maximum radial velocity.");
+  }
+  return {
+    profileId: sequence[0].profileId, startGHz, idleUs, adcStartUs, rampUs,
+    slopeMHzUs, samples, sampleRateKsps, txCount, loops, frameMs, chirpsPerFrame,
+    adcUs: adcSeconds * 1e6, bandwidthMHz: bandwidthHz / 1e6,
+    centerGHz: centerHz / 1e9, rangeBins, rangeResolutionM,
+    rangeBinM, rangeSpanM: rangeBinM * rangeBins,
+    maxVelocityMs, velocityResolutionMs, activeMs,
+    dutyPercent: activeMs / frameMs * 100, frameRateHz: 1000 / frameMs,
+    fov, thresholds, warnings,
+  };
+}
+
+if (typeof module !== "undefined") module.exports = { analyzeConfig };
+
+if (typeof document !== "undefined") {
+  const upload = document.getElementById("uploadConfig");
+  const panel = document.getElementById("uploadedPanel");
+  const message = document.getElementById("uploadMessage");
+  const metricGrid = document.getElementById("uploadedMetrics");
+  const explainer = document.getElementById("uploadedExplainer");
+  const warningBox = document.getElementById("uploadedWarnings");
+  const fixed = (n, digits = 2) => n.toFixed(digits);
+  const addText = (parent, tag, value) => {
+    const element = document.createElement(tag);
+    element.textContent = value;
+    parent.appendChild(element);
+    return element;
+  };
+  const addSection = (title, items) => {
+    const section = document.createElement("div");
+    section.className = "explainer-section";
+    addText(section, "h3", title);
+    for (const [label, value] of items) {
+      const item = document.createElement("div");
+      item.className = "explainer-item";
+      addText(item, "span", label);
+      addText(item, "strong", value);
+      section.appendChild(item);
+    }
+    explainer.appendChild(section);
+  };
+  upload.addEventListener("change", async () => {
+    const file = upload.files[0];
+    if (!file) return;
+    panel.hidden = false;
+    document.getElementById("uploadedName").textContent = file.name;
+    metricGrid.replaceChildren();
+    explainer.replaceChildren();
+    warningBox.replaceChildren();
+    try {
+      if (file.size > 1024 * 1024) throw new Error("Config file exceeds 1 MB.");
+      const data = analyzeConfig(await file.text());
+      message.textContent = "Calculated from the uploaded commands. Values are estimates for a regular TDM frame.";
+      const cards = [
+        ["Range resolution", `${fixed(data.rangeResolutionM, 4)} m`, "Smallest estimated range separation from ADC bandwidth."],
+        ["FFT range span", `${fixed(data.rangeSpanM)} m`, "Calculated span before any range FoV gate."],
+        ["Maximum radial velocity", `${fixed(data.maxVelocityMs, 3)} m/s`, "Estimated unambiguous radial speed."],
+        ["Velocity resolution", `${fixed(data.velocityResolutionMs, 4)} m/s`, "Estimated Doppler bin spacing."],
+        ["Frame rate", `${fixed(data.frameRateHz, 2)} Hz`, "Frames produced per second from frameCfg."],
+        ["Active chirp duty", `${fixed(data.dutyPercent, 1)}%`, "Time spent on configured chirps within each frame."],
+      ];
+      for (const [label, value, description] of cards) {
+        const card = document.createElement("article");
+        card.className = "metric";
+        addText(card, "span", label);
+        addText(card, "strong", value);
+        addText(card, "small", description);
+        metricGrid.appendChild(card);
+      }
+      addSection("Profile and ADC", [
+        ["Profile ID", `${data.profileId}`],
+        ["Start / center frequency", `${fixed(data.startGHz, 3)} / ${fixed(data.centerGHz, 4)} GHz`],
+        ["Idle / ramp time", `${fixed(data.idleUs)} / ${fixed(data.rampUs)} us`],
+        ["ADC start / capture time", `${fixed(data.adcStartUs)} / ${fixed(data.adcUs)} us`],
+        ["Slope / bandwidth", `${fixed(data.slopeMHzUs, 2)} MHz/us / ${fixed(data.bandwidthMHz, 1)} MHz`],
+        ["Samples / sample rate", `${data.samples} / ${fixed(data.sampleRateKsps)} ksps`],
+      ]);
+      addSection("Frame and derived stats", [
+        ["TX antennas / loops", `${data.txCount} / ${data.loops}`],
+        ["Chirps per frame", `${data.chirpsPerFrame}`],
+        ["Frame / active time", `${fixed(data.frameMs, 3)} / ${fixed(data.activeMs, 3)} ms`],
+        ["Range bins / bin spacing", `${data.rangeBins} / ${fixed(data.rangeBinM, 4)} m`],
+      ]);
+      addSection("Detection settings", [
+        ["Range FoV", data.fov[0] ? `${data.fov[0][0]} to ${data.fov[0][1]} m` : "Not specified"],
+        ["Doppler FoV", data.fov[1] ? `${data.fov[1][0]} to ${data.fov[1][1]} m/s` : "Not specified"],
+        ["Range CFAR threshold", data.thresholds[0] === undefined ? "Not specified" : `${data.thresholds[0]} dB`],
+        ["Doppler CFAR threshold", data.thresholds[1] === undefined ? "Not specified" : `${data.thresholds[1]} dB`],
+      ]);
+      for (const warning of data.warnings) addText(warningBox, "p", warning);
+    } catch (error) {
+      message.textContent = `Could not analyze ${file.name}: ${error.message}`;
+    }
+    upload.value = "";
+  });
+}

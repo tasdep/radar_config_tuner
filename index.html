@@ -14,6 +14,9 @@
           <p>Velocity-first chirp tuning for TI 1843/6843 AOP demo configs.</p>
         </div>
         <div class="actions">
+          <label class="upload-button" for="uploadConfig">Upload CFG
+            <input id="uploadConfig" type="file" accept=".cfg,.txt,text/plain">
+          </label>
           <button id="optimizeVelocity" type="button">Solve Targets</button>
           <button id="copyConfig" type="button">Copy CFG</button>
           <button id="downloadConfig" type="button">Download</button>
@@ -126,6 +129,17 @@
         </aside>
 
         <section class="main-area">
+          <section id="uploadedPanel" class="panel uploaded-panel" aria-labelledby="uploadedHeading" hidden>
+            <div class="config-header">
+              <h2 id="uploadedHeading">Uploaded config analysis</h2>
+              <span id="uploadedName"></span>
+            </div>
+            <p id="uploadMessage" role="status" aria-live="polite"></p>
+            <div id="uploadedMetrics" class="uploaded-metrics"></div>
+            <div id="uploadedExplainer" class="explainer-grid"></div>
+            <div id="uploadedWarnings" class="upload-warnings"></div>
+          </section>
+          <h2 class="tuner-heading">Tuner results <small>from the controls at left</small></h2>
           <section class="metrics" aria-label="Derived radar metrics">
             <article class="metric">
               <span>Velocity Resolution</span>
@@ -194,5 +208,6 @@
     </main>
 
     <script src="app.js"></script>
+    <script src="config-analysis.js"></script>
   </body>
 </html>
