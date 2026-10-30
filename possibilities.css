@@ -1,0 +1,41 @@
+.possibilities-shell { width: min(1200px, 100%); margin: 0 auto; padding: 22px; display: grid; gap: 18px; }
+.possibilities-controls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 18px; align-items: end; }
+.possibilities-controls label { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; font-weight: 700; font-size: 15px; }
+.possibilities-controls label span { color: var(--muted); font-weight: 400; font-size: 13px; }
+.possibilities-controls input { display: block; width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; background: var(--panel); color: var(--ink); font-size: 18px; font-weight: 700; }
+.possibilities-controls p { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 14px; }
+.possibilities-chart { padding: 18px; }
+.chart-heading, .list-heading { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+.chart-heading h2, .list-heading h2, .possibilities-lists h2 { margin: 0 0 4px; }
+.chart-heading p, .list-note { margin: 0; color: var(--muted); font-size: 14px; }
+.status-key { display: flex; flex-wrap: wrap; gap: 12px; color: var(--muted); font-size: 13px; }
+.status-key span { display: inline-flex; align-items: center; gap: 5px; }
+.no-symbol, .model-symbol, .bench-symbol { display: inline-block; width: 13px; height: 13px; border-radius: 3px; }
+.no-symbol { background: #e4e9eb; }
+.model-symbol { background: #b9e4df; }
+.bench-symbol { background: #268575; }
+#possibilityPlot { display: block; width: 100%; height: auto; max-height: 600px; }
+#possibilityPlot .axis { stroke: #6b7780; stroke-width: 1; }
+#possibilityPlot .gridline { stroke: #dae1e5; stroke-width: 1; }
+#possibilityPlot .axis-text { fill: #53616b; font-size: 13px; }
+#possibilityPlot .axis-label { fill: #25333d; font-size: 15px; font-weight: 600; }
+#possibilityPlot .feasible-empty { fill: #e4e9eb; }
+#possibilityPlot .feasible-model { fill: #b9e4df; }
+#possibilityPlot .feasible-bench { fill: #268575; }
+#possibilityPlot .model-point { fill: #fff; stroke: #1c5f68; stroke-width: 2.5; }
+#possibilityPlot .bench-point { fill: #102b30; stroke: #fff; stroke-width: 2; }
+#possibilityPlot .selection-line { stroke: #23343b; stroke-width: 1.5; stroke-dasharray: 5 4; }
+#possibilityPlot .selection-point { fill: #fff; stroke: #23343b; stroke-width: 2.5; }
+.plot-detail { min-height: 22px; margin: 0; color: var(--ink); font-size: 14px; }
+.empty-message { margin: 16px 0; color: var(--bad); font-weight: 700; }
+.possibilities-lists { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.possibilities-lists .panel { min-width: 0; padding: 18px; }
+.summary-table { border-collapse: collapse; width: 100%; margin-top: 10px; font-size: 14px; }
+.summary-table th, .summary-table td { padding: 9px 5px; border-bottom: 1px solid var(--line); text-align: left; }
+.summary-table th:not(:first-child), .summary-table td:not(:first-child) { text-align: right; white-space: nowrap; }
+.summary-table th { color: var(--muted); font-size: 12px; font-weight: 600; }
+.summary-table tbody tr:last-child td { border-bottom: 0; }
+.status-pill { display: inline-block; color: var(--ok); font-weight: 700; }
+.scope-note { color: var(--muted); font-size: 13px; line-height: 1.55; margin: 0; }
+@media (max-width: 800px) { .possibilities-lists { grid-template-columns: 1fr; } .chart-heading { flex-direction: column; } }
+@media (max-width: 620px) { .possibilities-shell { padding: 12px; } .possibilities-controls { grid-template-columns: 1fr; } .summary-table { font-size: 12px; } }

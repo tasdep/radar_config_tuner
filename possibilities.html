@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Radar Possibilities</title>
+    <link rel="stylesheet" href="styles.css?v=sdk36-aop-4">
+    <link rel="stylesheet" href="possibilities.css?v=1">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>Radar Possibilities</h1>
+        <p>Choose three requirements, then inspect the two that remain.</p>
+        <nav class="view-tabs" aria-label="Tuner views">
+          <a href="possibilities.html" aria-current="page">Possibilities</a>
+          <a href="index.html">Advanced tuner</a>
+        </nav>
+      </div>
+    </header>
+    <main class="possibilities-shell">
+      <section class="possibilities-controls" aria-label="Fixed radar requirements">
+        <label>Frame rate <input id="frameRateInput" type="number" min="1" max="30" step="0.1" value="10"> <span>Hz</span></label>
+        <label>Minimum usable range <input id="rangeInput" type="number" min="2" max="30" step="0.1" value="20"> <span>m</span></label>
+        <label>Velocity resolution <input id="resolutionInput" type="number" min="0.045" max="0.300" step="0.001" value="0.051"> <span>m/s or finer</span></label>
+        <p>Set these requirements. Each point in the map asks whether one profile can meet both remaining targets.</p>
+      </section>
+
+      <section class="possibilities-chart panel" aria-labelledby="chartTitle">
+        <div class="chart-heading">
+          <div>
+            <h2 id="chartTitle">Feasibility map</h2>
+            <p>Choose a range resolution cap along the bottom and a required maximum radial speed on the left.</p>
+          </div>
+          <div class="status-key" aria-label="Evidence status">
+            <span><i class="no-symbol" aria-hidden="true"></i> No modeled profile</span>
+            <span><i class="model-symbol" aria-hidden="true"></i> SDK model eligible</span>
+            <span><i class="bench-symbol" aria-hidden="true"></i> Exact profile passed packet check</span>
+          </div>
+        </div>
+        <svg id="possibilityPlot" viewBox="0 0 900 500" role="img" aria-label="Feasibility of range resolution and maximum radial speed targets for the selected frame rate, range, and velocity resolution"></svg>
+        <p id="plotDetail" class="plot-detail" aria-live="polite"></p>
+        <p id="emptyMessage" class="empty-message" hidden>No profile meets the fixed requirements with the 50% active-chirp limit. Reduce the frame rate, range, or velocity-detail demand.</p>
+      </section>
+
+      <section class="possibilities-lists">
+        <div class="panel">
+          <h2>Best modeled options</h2>
+          <div id="envelopeTable"></div>
+        </div>
+        <div class="panel">
+          <h2>Bench packet passes</h2>
+          <p class="list-note">Exact profiles that meet the fixed inputs and started, sent decoded packets and stopped on one AOP/ICBOOST. Their range and speed remain predictions.</p>
+          <div id="benchTable"></div>
+        </div>
+      </section>
+      <p class="scope-note">Pinned to mmWave SDK 03.06.02.00 xwr64xx AOP demo, 3 TX × 4 RX, ≤50% active chirps, ≥64 KiB modeled L3 reserve, 0.1 m range margin and ≤63.9 GHz RF end. The 1024 FFT-bin path is excluded after an SDK support warning and a bench CLI failure. Packet passes do not verify target separation or speed limits.</p>
+    </main>
+    <script src="sdk36-aop-limits.js?v=sdk36-aop-3"></script>
+    <script src="aop-possibilities.js?v=1"></script>
+    <script src="possibilities.js?v=1"></script>
+  </body>
+</html>

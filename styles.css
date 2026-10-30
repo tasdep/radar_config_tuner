@@ -65,6 +65,11 @@ textarea {
   font-size: 14px;
 }
 
+.view-tabs { display: flex; gap: 4px; margin-top: 12px; }
+.view-tabs a { color: #c7d9de; text-decoration: none; padding: 6px 10px; border-radius: 5px; font-size: 14px; }
+.view-tabs a:hover, .view-tabs a:focus-visible { color: #fff; background: #2b5660; }
+.view-tabs a[aria-current="page"] { color: #12343b; background: #f7fbfc; font-weight: 700; }
+
 .actions {
   display: flex;
   gap: 10px;

@@ -6,6 +6,17 @@ the SDK **03.06.02.00** xWR64xx object-detection demo and its 768 KiB L3 build.
 
 [Open the hosted Radar Config Tuner](https://tasdep.github.io/radar_config_tuner/).
 
+The [Possibilities view](https://tasdep.github.io/radar_config_tuner/possibilities.html)
+is a summary map for the pinned IWR6843AOP demo. Set frame rate, minimum
+usable range, and required velocity resolution; the remaining two axes are
+maximum allowed range resolution and minimum required maximum radial speed.
+Gray means the bounded SDK search found no supported profile, pale green means
+software eligible, and dark green means an exact profile passed a short UART
+packet check on the 2026-10-30 AOP/ICBOOST bench. Click a point in the map to
+read its classification. The detailed chirp controls remain in **Advanced
+tuner**. Bench packet output does not establish measured range or velocity
+performance.
+
 The tool is intentionally simple:
 
 - target solver for frame rate, usable range, velocity and range resolution
@@ -62,7 +73,7 @@ node check-config.js path/to/profile.cfg
 node check-config.js --max-doppler-resolution 0.051 path/to/profile.cfg
 node check-config.js --json path/to/profile.cfg
 node sweep-aop.js --json > sweep.json
-node --test config-analysis.test.js
+node --test config-analysis.test.js aop-possibilities.test.js
 ```
 
 Exit status is 0 when no modeled hard limit is exceeded, 1 for a modeled
