@@ -11,7 +11,7 @@
     <header class="topbar">
       <div>
         <h1>Radar Possibilities</h1>
-        <p>Choose three requirements, then inspect the two that remain.</p>
+        <p>Set frame rate, range, and velocity resolution to explore the remaining tradeoff.</p>
         <nav class="view-tabs" aria-label="Tuner views">
           <a href="possibilities.html" aria-current="page">Possibilities</a>
           <a href="index.html">Advanced tuner</a>
@@ -38,6 +38,7 @@
             <span><i class="bench-symbol" aria-hidden="true"></i> Exact profile passed packet check</span>
           </div>
         </div>
+        <label class="overlay-toggle"><input id="benchOverlayInput" type="checkbox" checked> Show dark green bench area</label>
         <svg id="possibilityPlot" viewBox="0 0 900 500" role="img" aria-label="Feasibility of range resolution and maximum radial speed targets for the selected frame rate, range, and velocity resolution"></svg>
         <p id="plotDetail" class="plot-detail" aria-live="polite"></p>
         <p id="emptyMessage" class="empty-message" hidden>No profile meets the fixed requirements with the 50% active-chirp limit. Reduce the frame rate, range, or velocity-detail demand.</p>
@@ -58,6 +59,6 @@
     </main>
     <script src="sdk36-aop-limits.js?v=sdk36-aop-3"></script>
     <script src="aop-possibilities.js?v=1"></script>
-    <script src="possibilities.js?v=1"></script>
+    <script src="possibilities.js?v=2"></script>
   </body>
 </html>

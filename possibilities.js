@@ -10,6 +10,7 @@ const BENCH_PACKET_PASSES = [
 const BIN_NAMES = { 64: "Top speed", 128: "Speed", 256: "Detail", 512: "Finest detail" };
 const svg = document.getElementById("possibilityPlot");
 const detail = document.getElementById("plotDetail");
+const benchOverlayInput = document.getElementById("benchOverlayInput");
 const inputs = {
   frameRateHz: document.getElementById("frameRateInput"),
   requiredRangeM: document.getElementById("rangeInput"),
@@ -20,6 +21,7 @@ let selected = { resolutionCm: 10, speedMs: 1 };
 let lastModel = null;
 let lastBench = [];
 let plotLimits = { xMaxCm: 50, yMaxMs: 6 };
+let snapTargets = [];
 
 function svgElement(name, attrs = {}, value = null) {
   const element = document.createElementNS("http://www.w3.org/2000/svg", name);
@@ -61,7 +63,8 @@ function statusAt(resolutionCm, speedMs) {
 }
 
 function showSelection() {
-  detail.textContent = `Range detail ≤${selected.resolutionCm.toFixed(1)} cm and radial speed ≥±${selected.speedMs.toFixed(2)} m/s: ${statusAt(selected.resolutionCm, selected.speedMs)}`;
+  const profile = selected.profile ? `${selected.profile} · ` : "";
+  detail.textContent = `${profile}Range detail ≤${selected.resolutionCm.toFixed(2)} cm and radial speed ≥±${selected.speedMs.toFixed(3)} m/s: ${statusAt(selected.resolutionCm, selected.speedMs)}`;
 }
 
 function drawMap() {
@@ -99,7 +102,9 @@ function drawMap() {
     }
   }
   for (const band of modelBands) svgElement("rect", { ...band, class: "feasible-model" });
-  for (const band of benchBands) svgElement("rect", { ...band, class: "feasible-bench" });
+  if (benchOverlayInput.checked) {
+    for (const band of benchBands) svgElement("rect", { ...band, class: "feasible-bench" });
+  }
   for (let cm = 0; cm <= xMaxCm; cm += xMaxCm > 70 ? 20 : 10) {
     const px = x(cm);
     svgElement("line", { x1: px, x2: px, y1: top, y2: top + plotH, class: "gridline" });
@@ -116,8 +121,11 @@ function drawMap() {
   const yLabel = svgElement("text", { x: 20, y: top + plotH / 2, "text-anchor": "middle", class: "axis-label" }, "Minimum required max radial speed, ±m/s");
   yLabel.setAttribute("transform", `rotate(-90 20 ${top + plotH / 2})`);
 
+  snapTargets = [];
   for (const row of lastModel.summaries) {
     const label = `${BIN_NAMES[row.fftBins]} modeled option: ${(row.rangeResolutionM * 100).toFixed(1)} cm, ±${row.maxVelocityMs.toFixed(2)} m/s`;
+    snapTargets.push({ resolutionCm: row.rangeResolutionM * 100, speedMs: row.maxVelocityMs,
+      profile: `${BIN_NAMES[row.fftBins]} modeled option` });
     const point = svgElement("circle", { cx: x(row.rangeResolutionM * 100), cy: y(row.maxVelocityMs), r: 6,
       class: "model-point", role: "img", tabindex: "0", "aria-label": label });
     const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
@@ -126,6 +134,8 @@ function drawMap() {
   }
   for (const row of lastBench) {
     const label = `${row.name}: ${(row.rangeResolutionM * 100).toFixed(1)} cm, ±${row.maxVelocityMs.toFixed(2)} m/s; ${row.packets} packets`;
+    snapTargets.push({ resolutionCm: row.rangeResolutionM * 100, speedMs: row.maxVelocityMs,
+      profile: `${row.name} bench pass` });
     const point = svgElement("circle", { cx: x(row.rangeResolutionM * 100), cy: y(row.maxVelocityMs), r: 6,
       class: "bench-point", role: "img", tabindex: "0", "aria-label": label });
     const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
@@ -165,7 +175,11 @@ function render() {
   renderTables();
 }
 
-for (const input of Object.values(inputs)) input.addEventListener("change", render);
+for (const input of Object.values(inputs)) input.addEventListener("change", () => {
+  selected.profile = null;
+  render();
+});
+benchOverlayInput.addEventListener("change", drawMap);
 svg.addEventListener("click", (event) => {
   const point = svg.createSVGPoint();
   point.x = event.clientX;
@@ -173,7 +187,26 @@ svg.addEventListener("click", (event) => {
   const local = point.matrixTransform(svg.getScreenCTM().inverse());
   const { W, H, left, right, top, bottom } = geometry;
   if (local.x < left || local.x > W - right || local.y < top || local.y > H - bottom) return;
-  selected = {
+  const x = (cm) => left + cm / plotLimits.xMaxCm * (W - left - right);
+  const y = (speed) => H - bottom - speed / plotLimits.yMaxMs * (H - top - bottom);
+  const screen = svg.getScreenCTM();
+  const toScreen = (px, py) => {
+    const point = svg.createSVGPoint();
+    point.x = px;
+    point.y = py;
+    return point.matrixTransform(screen);
+  };
+  let nearest = null;
+  let nearestDistance = 18;
+  for (const target of snapTargets) {
+    const at = toScreen(x(target.resolutionCm), y(target.speedMs));
+    const distance = Math.hypot(at.x - event.clientX, at.y - event.clientY);
+    if (distance < nearestDistance) {
+      nearest = target;
+      nearestDistance = distance;
+    }
+  }
+  selected = nearest ? { ...nearest } : {
     resolutionCm: (local.x - left) / (W - left - right) * plotLimits.xMaxCm,
     speedMs: (H - bottom - local.y) / (H - top - bottom) * plotLimits.yMaxMs,
   };

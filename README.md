@@ -12,10 +12,13 @@ usable range, and required velocity resolution; the remaining two axes are
 maximum allowed range resolution and minimum required maximum radial speed.
 Gray means the bounded SDK search found no supported profile, pale green means
 software eligible, and dark green means an exact profile passed a short UART
-packet check on the 2026-10-30 AOP/ICBOOST bench. Click a point in the map to
-read its classification. The detailed chirp controls remain in **Advanced
-tuner**. Bench packet output does not establish measured range or velocity
-performance.
+packet check on the 2026-10-30 AOP/ICBOOST bench. The checkbox hides the dark
+green area while keeping the tested dots visible. Click near a corner dot to
+select that profile's exact modeled values, or click elsewhere to inspect a
+target pair. The detailed chirp controls remain in **Advanced tuner**. The
+current search is specialized for these three fixed inputs; it cannot safely
+swap any three of the five metrics without a broader profile search. Bench
+packet output does not establish measured range or velocity performance.
 
 The tool is intentionally simple:
 
