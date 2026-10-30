@@ -337,7 +337,7 @@ function statusItems(m) {
 function generateConfig(m) {
   const device = currentDevice();
   const frameMs = 1000 / state.frameRate;
-  const gate = Math.floor(Math.min(state.rangeGate, m.usableRange) * 100) / 100;
+  const gate = Math.floor(state.rangeGate * 100) / 100;
   const dopplerGate = Math.floor(m.maxVelocity * 100) / 100;
   const name = `${state.device === "6843" ? "6843" : "1843"}AOP_vel_res_range_gui.cfg`;
 
@@ -403,7 +403,7 @@ function generateConfig(m) {
 function liveValues(m) {
   const device = currentDevice();
   const frameMs = 1000 / state.frameRate;
-  const gate = Math.floor(Math.min(state.rangeGate, m.usableRange) * 100) / 100;
+  const gate = Math.floor(state.rangeGate * 100) / 100;
   const dopplerGate = Math.floor(m.maxVelocity * 100) / 100;
   const profileCfg =
     `profileCfg 0 ${device.startFreqGHz} ${Math.round(state.idleTime)} 7 ` +

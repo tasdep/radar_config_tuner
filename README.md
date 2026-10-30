@@ -28,6 +28,8 @@ limit, and the 60–64 GHz chirp sweep boundary. It uses TI's **80% IF** rule fo
 estimated usable range; this is lower than the full FFT range span. The GUI
 solver keeps at least 64 KiB L3 reserve. The manual sliders can reach the
 theoretical memory boundary, which may still fail in the running firmware.
+Requested FoV values are preserved in the generated config even when a status
+check flags them; the tool does not silently narrow the user's gate.
 
 These checks are for a regular one-chirp-per-TX TDM frame. They do not prove
 RF calibration, packet output, target detection, or sustained operation. The
