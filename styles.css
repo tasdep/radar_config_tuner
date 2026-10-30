@@ -272,6 +272,12 @@ button:hover,
   font-size: 13px;
 }
 
+.upload-warnings .upload-error {
+  border-color: #efb6b6;
+  background: #fff1f1;
+  color: var(--bad);
+}
+
 .metric {
   background: var(--panel);
   border: 1px solid var(--line);

@@ -1,4 +1,6 @@
 // Read-only analysis of SDK 3.x frame configs with one TDM chirp per TX.
+const aopLimits = typeof module !== "undefined" ?
+  require("./sdk36-aop-limits.js") : aopSdk36Limits;
 const CONFIG_SPEED_OF_LIGHT = 299792458;
 
 function analyzeConfig(text) {
@@ -83,8 +85,35 @@ function analyzeConfig(text) {
   const activeMs = chirpsPerFrame * chirpSeconds * 1000;
   const rangeResolutionM = CONFIG_SPEED_OF_LIGHT / (2 * bandwidthHz);
   const rangeBinM = CONFIG_SPEED_OF_LIGHT * sampleRateKsps * 1000 / (2 * slopeHzS * rangeBins);
+  const fftRangeSpanM = rangeBinM * rangeBins;
+  const usableBeatHz = Math.min(sampleRateKsps * 1000 * 0.8, 10e6);
+  const usableRangeM = CONFIG_SPEED_OF_LIGHT * usableBeatHz / (2 * slopeHzS);
+  const endGHz = startGHz + slopeMHzUs * rampUs / 1000;
   const maxVelocityMs = CONFIG_SPEED_OF_LIGHT / (4 * centerHz * chirpSeconds * txCount);
   const velocityResolutionMs = CONFIG_SPEED_OF_LIGHT / (2 * centerHz * chirpSeconds * chirpsPerFrame);
+  const platform = text.match(/^%\s*Platform\s*:\s*(\S+)/m)?.[1];
+  const isSdk36Aop = platform === "xWR68xx_AOP";
+  const errors = [];
+  let l3 = null;
+  if (loops > aopLimits.AOP_SDK36_LIMITS.maxFrameLoops) {
+    errors.push(`frameCfg loops ${loops} exceeds mmWaveLink's 1–255 limit.`);
+  }
+  if (isSdk36Aop) {
+    if (endGHz > 64) errors.push(`Chirp sweep ends at ${endGHz.toFixed(3)} GHz, above the 64 GHz device band limit.`);
+    if (rangeBins > 1024) errors.push("SDK 3.6 AOP range FFT exceeds the 1024-bin range DPU limit.");
+    const channel = one("channelCfg");
+    const rxMask = number(channel[0], "channelCfg RX mask", { min: 0, integer: true });
+    const txMask = number(channel[1], "channelCfg TX mask", { min: 0, integer: true });
+    const rxCount = rxMask.toString(2).replace(/0/g, "").length;
+    if (rxMask > 15 || rxCount > 4) errors.push("AOP channelCfg RX mask exceeds four channels.");
+    if (txMask > 7 || sequence.some((item) => !(item.txMask & txMask))) {
+      errors.push("AOP chirpCfg uses a TX channel not enabled by channelCfg.");
+    }
+    l3 = aopLimits.aopL3Usage({ adcSamples: samples, loops, txCount, rxCount });
+    if (l3.freeBytes < 0) {
+      errors.push(`SDK 3.6 AOP L3 needs ${(l3.usedBytes / 1024).toFixed(1)} KiB (cube + detection matrix); only 768 KiB is available.`);
+    }
+  }
 
   const fov = {};
   for (const row of rows("cfarFovCfg")) {
@@ -102,10 +131,23 @@ function analyzeConfig(text) {
     if ((type === 0 || type === 1) && Number.isFinite(threshold)) thresholds[type] = threshold;
   }
   const warnings = [];
+  if (!isSdk36Aop) warnings.push("Firmware-specific processing-memory check not available for this platform.");
+  if (l3 && l3.freeBytes >= 0 && l3.freeBytes < 64 * 1024) {
+    warnings.push(`SDK 3.6 AOP L3 headroom is only ${(l3.freeBytes / 1024).toFixed(1)} KiB; verify on hardware.`);
+  }
+  if (isSdk36Aop && rangeBins === 256 && (loops === 59 || loops === 61)) {
+    warnings.push(`Bench observation: this 256-bin/${loops}-loop shape triggered an EDMA assertion with one AOP UART build; this is not a proven general hardware limit.`);
+  }
+  if (isSdk36Aop && rangeBins === 512 && loops === 30) {
+    warnings.push("Bench observation: one 512-bin/30-loop AOP UART profile started but yielded no valid packets; this is not a proven general hardware limit.");
+  }
   if (adcStartUs + adcSeconds * 1e6 > rampUs) warnings.push("ADC capture extends beyond the ramp end time.");
   if (activeMs > frameMs) warnings.push("Active chirps exceed the configured frame period.");
-  if (fov[0] && (fov[0][0] < 0 || fov[0][1] > rangeBinM * rangeBins)) {
+  if (fov[0] && (fov[0][0] < 0 || fov[0][1] > fftRangeSpanM)) {
     warnings.push("Range FoV extends beyond the calculated FFT range span.");
+  }
+  if (isSdk36Aop && fov[0] && fov[0][1] > usableRangeM) {
+    warnings.push(`Range FoV extends beyond TI's 80% IF usable-range estimate (${usableRangeM.toFixed(2)} m).`);
   }
   if (fov[1] && Math.max(Math.abs(fov[1][0]), Math.abs(fov[1][1])) > maxVelocityMs) {
     warnings.push("Doppler FoV extends beyond the calculated maximum radial velocity.");
@@ -115,10 +157,10 @@ function analyzeConfig(text) {
     slopeMHzUs, samples, sampleRateKsps, txCount, loops, frameMs, chirpsPerFrame,
     adcUs: adcSeconds * 1e6, bandwidthMHz: bandwidthHz / 1e6,
     centerGHz: centerHz / 1e9, rangeBins, rangeResolutionM,
-    rangeBinM, rangeSpanM: rangeBinM * rangeBins,
+    rangeBinM, rangeSpanM: fftRangeSpanM, usableRangeM, endGHz,
     maxVelocityMs, velocityResolutionMs, activeMs,
     dutyPercent: activeMs / frameMs * 100, frameRateHz: 1000 / frameMs,
-    fov, thresholds, warnings,
+    platform, fov, thresholds, l3, errors, warnings,
   };
 }
 
@@ -166,11 +208,16 @@ if (typeof document !== "undefined") {
       const cards = [
         ["Range resolution", `${fixed(data.rangeResolutionM, 4)} m`, "Smallest estimated range separation from ADC bandwidth."],
         ["FFT range span", `${fixed(data.rangeSpanM)} m`, "Calculated span before any range FoV gate."],
+        ["Estimated usable range", `${fixed(data.usableRangeM)} m`, "TI's 80% ADC IF visibility model for complex 6843/1843 chirps."],
         ["Maximum radial velocity", `${fixed(data.maxVelocityMs, 3)} m/s`, "Estimated unambiguous radial speed."],
         ["Velocity resolution", `${fixed(data.velocityResolutionMs, 4)} m/s`, "Estimated Doppler bin spacing."],
         ["Frame rate", `${fixed(data.frameRateHz, 2)} Hz`, "Frames produced per second from frameCfg."],
         ["Active chirp duty", `${fixed(data.dutyPercent, 1)}%`, "Time spent on configured chirps within each frame."],
       ];
+      if (data.l3) cards.push([
+        "SDK 3.6 AOP L3", `${fixed(data.l3.usedBytes / 1024, 1)} / 768 KiB`,
+        "Radar cube plus Doppler detection matrix; firmware-specific estimate.",
+      ]);
       for (const [label, value, description] of cards) {
         const card = document.createElement("article");
         card.className = "metric";
@@ -199,6 +246,7 @@ if (typeof document !== "undefined") {
         ["Range CFAR threshold", data.thresholds[0] === undefined ? "Not specified" : `${data.thresholds[0]} dB`],
         ["Doppler CFAR threshold", data.thresholds[1] === undefined ? "Not specified" : `${data.thresholds[1]} dB`],
       ]);
+      for (const error of data.errors) addText(warningBox, "p", error).className = "upload-error";
       for (const warning of data.warnings) addText(warningBox, "p", warning);
     } catch (error) {
       message.textContent = `Could not analyze ${file.name}: ${error.message}`;

@@ -11,7 +11,7 @@
       <header class="topbar">
         <div>
           <h1>Radar Config Tuner</h1>
-          <p>Velocity-first chirp tuning for TI 1843/6843 AOP demo configs.</p>
+          <p>Chirp tuning for TI 1843/6843 AOP demo configs.</p>
         </div>
         <div class="actions">
           <label class="upload-button" for="uploadConfig">Upload CFG
@@ -84,6 +84,7 @@
                 <option>64</option>
                 <option selected>128</option>
                 <option>256</option>
+                <option>512</option>
               </select>
             </label>
             <div class="slider-row">
@@ -99,7 +100,7 @@
             <div class="slider-row">
               <label for="idleTime">Idle time</label>
               <output id="idleTimeOut"></output>
-              <input id="idleTime" type="range" min="10" max="300" step="1">
+              <input id="idleTime" type="range" min="10" max="1000" step="1">
             </div>
             <div class="slider-row">
               <label for="rampEndTime">Ramp end time</label>
@@ -109,7 +110,7 @@
             <div class="slider-row">
               <label for="numLoops">Frame loops</label>
               <output id="numLoopsOut"></output>
-              <input id="numLoops" type="range" min="1" max="256" step="1">
+              <input id="numLoops" type="range" min="1" max="255" step="1">
             </div>
           </section>
 
@@ -158,12 +159,20 @@
               <strong id="fftSpan">-</strong>
             </article>
             <article class="metric">
+              <span>Estimated Usable Range (TI 80% IF)</span>
+              <strong id="usableRange">-</strong>
+            </article>
+            <article class="metric">
               <span>Active Chirp Time</span>
               <strong id="activeTime">-</strong>
             </article>
             <article class="metric">
               <span>Duty</span>
               <strong id="duty">-</strong>
+            </article>
+            <article class="metric">
+              <span>SDK 3.6 AOP L3 Use</span>
+              <strong id="l3Usage">-</strong>
             </article>
           </section>
 
@@ -211,7 +220,8 @@
       </section>
     </main>
 
-    <script src="app.js?v=chirp-graph-1"></script>
-    <script src="config-analysis.js"></script>
+    <script src="sdk36-aop-limits.js"></script>
+    <script src="app.js?v=sdk36-aop-limits-1"></script>
+    <script src="config-analysis.js?v=sdk36-aop-limits-1"></script>
   </body>
 </html>

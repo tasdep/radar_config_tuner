@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const { analyzeConfig } = require("./config-analysis.js");
 
 const config = `% Platform:xWR68xx_AOP
+channelCfg 15 7 0
 profileCfg 0 60 179 7 23 0 0 54 1 128 9142 0 0 158
 chirpCfg 0 0 0 0 0 0 0 1
 chirpCfg 1 1 0 0 0 0 0 2
@@ -23,7 +24,36 @@ test("analyzes generated SDK 3.x TDM config", () => {
   assert.ok(Math.abs(result.activeMs - 48.48) < 0.001);
   assert.ok(result.rangeResolutionM > 0.15 && result.rangeResolutionM < 0.25);
   assert.ok(result.maxVelocityMs > 1.9 && result.maxVelocityMs < 2.1);
+  assert.equal(result.l3.usedBytes, 512 * 1024);
+  assert.deepEqual(result.errors, []);
   assert.deepEqual(result.warnings, []);
+});
+
+test("rejects original 256-loop frame and SDK 3.6 AOP L3 overrun", () => {
+  const result = analyzeConfig(config
+    .replace("179 7 23", "40 7 23")
+    .replace("frameCfg 0 2 80", "frameCfg 0 2 256"));
+  assert.equal(result.l3.radarCubeBytes, 1536 * 1024);
+  assert.equal(result.l3.detectionMatrixBytes, 64 * 1024);
+  assert.match(result.errors.join(" "), /1–255/);
+  assert.match(result.errors.join(" "), /1600.0 KiB/);
+});
+
+test("matches the SDK L3 boundary at 122 and 123 loops", () => {
+  const at122 = analyzeConfig(config.replace("frameCfg 0 2 80", "frameCfg 0 2 122"));
+  const at123 = analyzeConfig(config.replace("frameCfg 0 2 80", "frameCfg 0 2 123"));
+  assert.equal(at122.l3.usedBytes, 764 * 1024);
+  assert.equal(at122.l3.freeBytes, 4 * 1024);
+  assert.deepEqual(at122.errors, []);
+  assert.equal(at123.l3.usedBytes, 770 * 1024);
+  assert.match(at123.errors.join(" "), /L3/);
+});
+
+test("distinguishes TI usable range from full FFT span", () => {
+  const result = analyzeConfig(config.replace("cfarFovCfg -1 0 0 20", "cfarFovCfg -1 0 0 21"));
+  assert.ok(result.rangeSpanM > 21);
+  assert.ok(result.usableRangeM < 21);
+  assert.match(result.warnings.join(" "), /80% IF usable-range/);
 });
 
 test("uses uploaded ADC start, TX count, and frame period", () => {
@@ -49,4 +79,17 @@ test("warns when ADC capture and frame timing do not fit", () => {
     .replace("frameCfg 0 2 80 0 100", "frameCfg 0 2 80 0 30"));
   assert.match(result.warnings.join(" "), /ADC capture/);
   assert.match(result.warnings.join(" "), /Active chirps/);
+});
+
+test("labels observed edge failures separately from SDK hard limits", () => {
+  const odd = analyzeConfig(config
+    .replace("1 128 9142", "1 256 9142")
+    .replace("frameCfg 0 2 80", "frameCfg 0 2 59"));
+  assert.deepEqual(odd.errors, []);
+  assert.match(odd.warnings.join(" "), /EDMA assertion/);
+  const noPackets = analyzeConfig(config
+    .replace("1 128 9142", "1 512 9142")
+    .replace("frameCfg 0 2 80", "frameCfg 0 2 30"));
+  assert.deepEqual(noPackets.errors, []);
+  assert.match(noPackets.warnings.join(" "), /no valid packets/);
 });
