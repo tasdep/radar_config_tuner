@@ -29,8 +29,7 @@ for (const requestedRangeM of rangeTargets) {
       if (slopeRegister <= 0) continue;
       // Express a slope that encodes to exactly this register after CLI truncation.
       const slopeMHzUs = (slopeRegister + 0.1) * 2.7 * 1000 * 900 / 2 ** 26;
-      const loops = aopMaxLoopsForL3(adcSamples, TX, RX,
-        AOP_SDK36_LIMITS.solverL3ReserveBytes);
+      const loops = aopMaxLoopsForL3(adcSamples, TX, RX);
       if (loops < 2) continue;
       const probe = aopQuantizedProfile({
         startGHz: 60, idleUs: 10, adcStartUs: ADC_START_US, rampUs,
@@ -53,7 +52,7 @@ for (const requestedRangeM of rangeTargets) {
       if (model.dopplerResolutionMs > TARGET_DOPPLER_MS || idleUs > 5242 ||
           activeMs > DUTY_LIMIT_MS || FRAME_MS - activeMs < 0.3 ||
           model.endGHz > RF_END_LIMIT_GHZ || model.usableRangeM < requestedRangeM ||
-          model.usableRangeM > 22.6 || model.l3.freeBytes < 64 * 1024) continue;
+          model.usableRangeM > 22.6 || model.l3.freeBytes < 0) continue;
       const hpf2CornerM = C * 350000 / (2 * model.actualSlopeMHzUs * 1e12);
       rows.push({
         requestedRangeM, adcSamples, sampleRateKsps,

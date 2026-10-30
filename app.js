@@ -262,8 +262,7 @@ function solveTargets() {
     slopeHzPerS * (7e-6 + state.adcSamples / sampleRateHz / 2);
   const budgetUs = (1000000 / state.frameRate) * dutyBudget() / 100;
   const memoryLoops = state.device === "6843" ?
-    aopMaxLoopsForL3(state.adcSamples, NUM_TX, 4,
-      AOP_SDK36_LIMITS.solverL3ReserveBytes) : 255;
+    aopMaxLoopsForL3(state.adcSamples, NUM_TX, 4) : 255;
   const maxLoops = Math.min(255, memoryLoops,
     Math.floor(budgetUs / (NUM_TX * (state.rampEndTime + 10))));
   state.numLoops = state.device === "6843" ? Math.max(2, maxLoops - maxLoops % 2) :
@@ -345,9 +344,8 @@ function statusItems(m, validation) {
     const usedKiB = m.l3.usedBytes / 1024;
     const freeKiB = m.l3.freeBytes / 1024;
     items.push({
-      level: freeKiB < 0 ? "bad" : freeKiB < 64 ? "warn" : "ok",
-      label: freeKiB < 0 ? "SDK 3.6 AOP L3 exceeded" :
-        freeKiB < 64 ? "SDK 3.6 AOP L3 headroom is tight" : "SDK 3.6 AOP L3 fits",
+      level: freeKiB < 0 ? "bad" : "ok",
+      label: freeKiB < 0 ? "SDK 3.6 AOP L3 exceeded" : "SDK 3.6 AOP L3 fits",
       value: `${fmt(usedKiB, 1)} / 768 KiB; ${fmt(freeKiB, 1)} KiB free (cube + detection matrix)`,
     });
   } else {

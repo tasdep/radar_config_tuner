@@ -13,7 +13,6 @@ const AOP_SDK36_LIMITS = {
   rfFreqScaleFactor: 2.7, // xWR68xx 60 GHz mmWaveLink register encoding
   bytesPerComplexSample: 4,
   bytesPerDetectionCell: 2,
-  solverL3ReserveBytes: 64 * 1024,
 };
 
 function aopNextPowerOfTwo(value) {
@@ -39,11 +38,10 @@ function aopL3Usage({ adcSamples, loops, txCount, rxCount = AOP_SDK36_LIMITS.rxC
   };
 }
 
-function aopMaxLoopsForL3(adcSamples, txCount, rxCount = AOP_SDK36_LIMITS.rxCount,
-  reserveBytes = 0) {
+function aopMaxLoopsForL3(adcSamples, txCount, rxCount = AOP_SDK36_LIMITS.rxCount) {
   let maximum = 0;
   for (let loops = 1; loops <= AOP_SDK36_LIMITS.maxFrameLoops; loops++) {
-    if (aopL3Usage({ adcSamples, loops, txCount, rxCount }).freeBytes < reserveBytes) break;
+    if (aopL3Usage({ adcSamples, loops, txCount, rxCount }).freeBytes < 0) break;
     if (loops % 2 === 0) maximum = loops;
   }
   return maximum;

@@ -193,9 +193,6 @@ function analyzeConfig(text) {
   }
   const warnings = [];
   if (!isSdk36Aop) warnings.push("Firmware-specific processing-memory check not available for this platform.");
-  if (l3 && l3.freeBytes >= 0 && l3.freeBytes < 64 * 1024) {
-    warnings.push(`SDK 3.6 AOP L3 headroom is only ${(l3.freeBytes / 1024).toFixed(1)} KiB; verify on hardware.`);
-  }
   if (isSdk36Aop && rangeBins === 512 && loops === 30) {
     warnings.push("Bench observation: one 512-bin/30-loop AOP UART profile started but yielded no valid packets; this is not a proven general hardware limit.");
   }

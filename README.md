@@ -44,8 +44,8 @@ the SDK documents this mode as unsupported because of an EDMA address jump,
 and a 576-sample bench profile lost the CLI despite the demo's 1022-bin
 workaround. It uses TI's **80% IF** rule for
 estimated usable range; this is lower than the full FFT range span. The GUI
-solver keeps at least 64 KiB L3 reserve. The manual sliders can reach the
-theoretical memory boundary, which may still fail in the running firmware.
+solver and map reject profiles only when the modeled L3 allocations exceed
+768 KiB. Profiles near that boundary still need a hardware check.
 Requested FoV values are preserved in the generated config even when a status
 check flags them; the tool does not silently narrow the user's gate.
 
@@ -107,9 +107,8 @@ The 256-bin 59- and 61-loop profiles asserted in EDMA, consistent with the
 SDK's even-loop requirement, while 60 loops ran;
 the 512-bin 30-loop profile started but produced no valid packets twice.
 An experimental 576-sample/14-loop profile entered the unsupported 1024 FFT
-mode and stopped the CLI at `sensorStart`. Use the
-64 KiB-reserve solver output as a starting point, then verify the exact image
-and config on hardware.
+mode and stopped the CLI at `sensorStart`. Use the solver output as a starting
+point, then verify the exact image and config on hardware.
 
 Checker:
 

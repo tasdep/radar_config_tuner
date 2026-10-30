@@ -20,8 +20,7 @@ function aopPossibilities({ velocityResolutionLimitMs, frameRateHz, requiredRang
   const summaries = [];
   for (const fftBins of POSSIBILITY_FFT_BINS) {
       const firstSamples = fftBins === 64 ? 64 : fftBins / 2 + 4;
-      const maxL3Loops = possibilitiesLimits.aopMaxLoopsForL3(fftBins, 3, 4,
-        possibilitiesLimits.AOP_SDK36_LIMITS.solverL3ReserveBytes);
+      const maxL3Loops = possibilitiesLimits.aopMaxLoopsForL3(fftBins, 3, 4);
       let best = null;
       for (const sampleRateKsps of POSSIBILITY_SAMPLE_RATES_KSPS) {
         for (let adcSamples = firstSamples; adcSamples <= fftBins; adcSamples += 4) {
@@ -64,7 +63,7 @@ function aopPossibilities({ velocityResolutionLimitMs, frameRateHz, requiredRang
               model.endGHz > POSSIBILITY_RF_END_GHZ ||
               activeMs > maxActiveMs ||
               frameMs - activeMs < 0.3 ||
-              model.l3.freeBytes < 64 * 1024) continue;
+              model.l3.freeBytes < 0) continue;
           const candidate = {
             requiredRangeM, fftBins,
             rangeResolutionM: model.rangeResolutionM,
