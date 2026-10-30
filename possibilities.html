@@ -37,8 +37,17 @@
             <span><i class="model-symbol" aria-hidden="true"></i> SDK model eligible</span>
           </div>
         </div>
-        <label class="overlay-toggle"><input id="samplePointsInput" type="checkbox" checked> Show sampled profiles</label>
+        <div class="plot-controls">
+          <label class="overlay-toggle"><input id="samplePointsInput" type="checkbox" checked> Show sampled profiles</label>
+          <label class="axis-view-label">Plot view
+            <select id="axisViewInput">
+              <option value="focus">Focus: 0–60 cm, 0–8 m/s</option>
+              <option value="overview">Overview: 0–300 cm, 0–20 m/s</option>
+            </select>
+          </label>
+        </div>
         <p id="sampleStats" class="sample-stats" aria-live="polite"></p>
+        <p id="axisNotice" class="axis-notice" aria-live="polite"></p>
         <svg id="possibilityPlot" viewBox="0 0 900 500" role="img" aria-label="Feasibility of range resolution and maximum radial speed targets for the selected frame rate, range, and velocity resolution"></svg>
         <p id="plotDetail" class="plot-detail" aria-live="polite"></p>
         <p id="emptyMessage" class="empty-message" hidden>No eligible profile was found in this sample. Try a lower frame rate, shorter range, or coarser velocity resolution.</p>
@@ -55,6 +64,6 @@
     <script src="sdk36-aop-limits.js?v=sdk36-aop-4"></script>
     <script src="aop-possibilities.js?v=2"></script>
     <script src="aop-profile-sampler.js?v=1"></script>
-    <script src="possibilities.js?v=3"></script>
+    <script src="possibilities.js?v=4"></script>
   </body>
 </html>

@@ -4,6 +4,8 @@ const svg = document.getElementById("possibilityPlot");
 const detail = document.getElementById("plotDetail");
 const samplePointsInput = document.getElementById("samplePointsInput");
 const sampleStats = document.getElementById("sampleStats");
+const axisViewInput = document.getElementById("axisViewInput");
+const axisNotice = document.getElementById("axisNotice");
 const PROFILE_SAMPLE_COUNT = 20000;
 const PROFILE_SAMPLE_SEED = 6843;
 const inputs = {
@@ -12,9 +14,13 @@ const inputs = {
   velocityResolutionLimitMs: document.getElementById("resolutionInput"),
 };
 const geometry = { W: 900, H: 500, left: 76, right: 34, top: 20, bottom: 72 };
+const AXIS_VIEWS = {
+  focus: { xMaxCm: 60, yMaxMs: 8 },
+  overview: { xMaxCm: 300, yMaxMs: 20 },
+};
 let selected = { resolutionCm: 10, speedMs: 1 };
 let lastModel = null;
-let plotLimits = { xMaxCm: 50, yMaxMs: 6 };
+let plotLimits = AXIS_VIEWS.focus;
 let snapTargets = [];
 
 function svgElement(name, attrs = {}, value = null) {
@@ -62,20 +68,25 @@ function drawMap() {
   svg.replaceChildren();
   const { W, H, left, right, top, bottom } = geometry;
   const plotW = W - left - right, plotH = H - top - bottom;
-  const all = lastModel.frontier;
-  let maxResolutionCm = 0;
-  let maxSpeedMs = 0;
-  for (const row of all) {
-    maxResolutionCm = Math.max(maxResolutionCm, row.rangeResolutionM * 100);
-    maxSpeedMs = Math.max(maxSpeedMs, row.maxVelocityMs);
-  }
-  const xMaxCm = Math.max(50, Math.ceil(maxResolutionCm * 1.1 / 5) * 5);
-  const yMaxMs = Math.max(6, Math.ceil(maxSpeedMs * 1.13));
-  plotLimits = { xMaxCm, yMaxMs };
+  plotLimits = AXIS_VIEWS[axisViewInput.value];
+  const { xMaxCm, yMaxMs } = plotLimits;
   const x = (cm) => left + cm / xMaxCm * plotW;
   const y = (speed) => top + plotH - speed / yMaxMs * plotH;
+  const visible = (row) => row.rangeResolutionM * 100 <= xMaxCm && row.maxVelocityMs <= yMaxMs;
+  const hiddenCount = lastModel.frontier.filter((row) => !visible(row)).length;
+  const hiddenSamples = lastModel.candidates.filter((row) => !visible(row)).length;
+  axisNotice.textContent = hiddenCount ?
+    `${hiddenCount} of ${lastModel.frontier.length} envelope points and ${hiddenSamples} sampled profiles lie beyond this fixed view. Use Overview to see more; eligibility and summaries still use the full sample.` :
+    (hiddenSamples ? `${hiddenSamples} sampled profiles lie beyond this fixed view; the envelope fits. Use Overview to see more.` :
+      "Axes stay fixed as requirements change, so profile changes remain comparable.");
 
   svgElement("rect", { x: left, y: top, width: plotW, height: plotH, class: "feasible-empty" });
+  const plotClip = svgElement("clipPath", { id: "plotClip" });
+  const clipRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  for (const [key, value] of Object.entries({ x: left, y: top, width: plotW, height: plotH })) {
+    clipRect.setAttribute(key, value);
+  }
+  plotClip.appendChild(clipRect);
   const speeds = [...new Set([0, yMaxMs,
     ...lastModel.frontier.map((row) => row.maxVelocityMs)])]
     .filter((speed) => speed >= 0 && speed <= yMaxMs)
@@ -93,11 +104,10 @@ function drawMap() {
   }
   for (const band of modelBands) svgElement("rect", { ...band, class: "feasible-model" });
   if (samplePointsInput.checked) {
-    const visible = lastModel.candidates.filter((row) =>
-      row.rangeResolutionM * 100 <= xMaxCm && row.maxVelocityMs <= yMaxMs);
-    const stride = Math.max(1, Math.ceil(visible.length / 850));
-    for (let i = 0; i < visible.length; i += stride) {
-      const row = visible[i];
+    const visibleCandidates = lastModel.candidates.filter(visible);
+    const stride = Math.max(1, Math.ceil(visibleCandidates.length / 850));
+    for (let i = 0; i < visibleCandidates.length; i += stride) {
+      const row = visibleCandidates[i];
       svgElement("circle", { cx: x(row.rangeResolutionM * 100), cy: y(row.maxVelocityMs),
         r: 1.7, class: "sample-point" });
     }
@@ -112,7 +122,7 @@ function drawMap() {
       }
     }
     path += ` L ${W - right} ${y(frontier.at(-1).maxVelocityMs)}`;
-    svgElement("path", { d: path, class: "envelope-line" });
+    svgElement("path", { d: path, class: "envelope-line", "clip-path": "url(#plotClip)" });
   }
   for (let cm = 0; cm <= xMaxCm; cm += xMaxCm > 70 ? 20 : 10) {
     const px = x(cm);
@@ -132,12 +142,14 @@ function drawMap() {
 
   snapTargets = [];
   for (const row of lastModel.frontier) {
+    if (!visible(row)) continue;
     snapTargets.push({ resolutionCm: row.rangeResolutionM * 100, speedMs: row.maxVelocityMs,
       profile: "Sampled envelope point" });
     svgElement("circle", { cx: x(row.rangeResolutionM * 100), cy: y(row.maxVelocityMs),
       r: 2.8, class: "envelope-point" });
   }
   for (const row of lastModel.summaries) {
+    if (!visible(row)) continue;
     const label = `${BIN_NAMES[row.fftBins]} modeled option: ${(row.rangeResolutionM * 100).toFixed(1)} cm, ±${row.maxVelocityMs.toFixed(2)} m/s`;
     snapTargets.push({ resolutionCm: row.rangeResolutionM * 100, speedMs: row.maxVelocityMs,
       profile: `${BIN_NAMES[row.fftBins]} modeled option` });
@@ -147,8 +159,10 @@ function drawMap() {
     title.textContent = label;
     point.appendChild(title);
   }
-  selected.resolutionCm = Math.min(selected.resolutionCm, xMaxCm);
-  selected.speedMs = Math.min(selected.speedMs, yMaxMs);
+  if (selected.resolutionCm > xMaxCm || selected.speedMs > yMaxMs) {
+    selected = { resolutionCm: Math.min(selected.resolutionCm, xMaxCm),
+      speedMs: Math.min(selected.speedMs, yMaxMs) };
+  }
   svgElement("line", { x1: x(selected.resolutionCm), x2: x(selected.resolutionCm), y1: top, y2: top + plotH, class: "selection-line" });
   svgElement("line", { x1: left, x2: W - right, y1: y(selected.speedMs), y2: y(selected.speedMs), class: "selection-line" });
   svgElement("circle", { cx: x(selected.resolutionCm), cy: y(selected.speedMs), r: 6, class: "selection-point" });
@@ -178,6 +192,7 @@ for (const input of Object.values(inputs)) input.addEventListener("change", () =
   render();
 });
 samplePointsInput.addEventListener("change", drawMap);
+axisViewInput.addEventListener("change", drawMap);
 svg.addEventListener("click", (event) => {
   const point = svg.createSVGPoint();
   point.x = event.clientX;

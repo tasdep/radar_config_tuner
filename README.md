@@ -11,8 +11,12 @@ samples quantized profiles for the pinned IWR6843AOP demo. Set frame rate,
 minimum usable range, and required velocity resolution; the remaining two
 axes are maximum allowed range resolution and minimum required maximum radial
 speed. A fixed seed drives 20,000 stratified trials across ADC counts, sample
-rates, start frequencies, slopes, ramps, even loop counts, and idle times;
-the earlier target-directed search supplies additional candidates. The sampled
+rates, start frequencies, slopes, ramps, even loop counts, and idle times.
+The plot uses fixed **Focus** axes (0–60 cm, 0–8 m/s) for comparing changes
+to the requirements, with a fixed **Overview** (0–300 cm, 0–20 m/s) for wider
+cases. The page reports how many profiles or envelope points lie outside the
+selected view; the calculation and summary table still use the complete sample.
+The earlier target-directed search supplies additional candidates. The sampled
 non-dominated profiles form the feasible envelope. Gray
 means no eligible profile was found in that sample; it does not prove
 impossibility. Click near a boundary dot to select its exact modeled values,
