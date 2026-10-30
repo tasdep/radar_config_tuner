@@ -1,16 +1,11 @@
 // A filled cell means one profile meets both plotted targets.
-// A bench pass means decoded packets, not measured range or velocity performance.
-const BENCH_PACKET_PASSES = [
-  { name: "Top speed", frameRateHz: 10, rangeGateM: 20, usableRangeM: 21.01, rangeResolutionM: .410313, maxVelocityMs: 5.66034, velocityResolutionMs: .050539, packets: "41 / 4 s" },
-  { name: "Speed", frameRateHz: 10, rangeGateM: 20, usableRangeM: 20.13, rangeResolutionM: .196589, maxVelocityMs: 2.83748, velocityResolutionMs: .050669, packets: "41 / 4 s" },
-  { name: "Detail", frameRateHz: 10, rangeGateM: 20, usableRangeM: 20.13, rangeResolutionM: .098295, maxVelocityMs: 1.42463, velocityResolutionMs: .050879, packets: "41 / 4 s" },
-  { name: "Finest detail", frameRateHz: 10, rangeGateM: 20, usableRangeM: 20.13, rangeResolutionM: .049147, maxVelocityMs: .71348, velocityResolutionMs: .050963, packets: "101 / 10 s" },
-  { name: "Longer range", frameRateHz: 10, rangeGateM: 22, usableRangeM: 22.23, rangeResolutionM: .0543, maxVelocityMs: .713, velocityResolutionMs: .050904, packets: "41 / 4 s" },
-];
 const BIN_NAMES = { 64: "Top speed", 128: "Speed", 256: "Detail", 512: "Finest detail" };
 const svg = document.getElementById("possibilityPlot");
 const detail = document.getElementById("plotDetail");
-const benchOverlayInput = document.getElementById("benchOverlayInput");
+const samplePointsInput = document.getElementById("samplePointsInput");
+const sampleStats = document.getElementById("sampleStats");
+const PROFILE_SAMPLE_COUNT = 20000;
+const PROFILE_SAMPLE_SEED = 6843;
 const inputs = {
   frameRateHz: document.getElementById("frameRateInput"),
   requiredRangeM: document.getElementById("rangeInput"),
@@ -19,7 +14,6 @@ const inputs = {
 const geometry = { W: 900, H: 500, left: 76, right: 34, top: 20, bottom: 72 };
 let selected = { resolutionCm: 10, speedMs: 1 };
 let lastModel = null;
-let lastBench = [];
 let plotLimits = { xMaxCm: 50, yMaxMs: 6 };
 let snapTargets = [];
 
@@ -52,14 +46,11 @@ function bestResolutionAtSpeed(items, speedMs) {
 
 function statusAt(resolutionCm, speedMs) {
   const capM = resolutionCm / 100;
-  if (lastBench.some((row) => row.rangeResolutionM <= capM && row.maxVelocityMs >= speedMs)) {
-    return "Exact bench profile passed packet output; target performance is not yet measured.";
-  }
-  if (lastModel && lastModel.candidates.some((row) =>
+  if (lastModel && lastModel.frontier.some((row) =>
     row.rangeResolutionM <= capM && row.maxVelocityMs >= speedMs)) {
-    return "SDK model eligible; no exact bench packet pass for this pair.";
+    return "SDK model eligible in the sampled search.";
   }
-  return "No supported profile found by this software search.";
+  return "No eligible profile found in this sample.";
 }
 
 function showSelection() {
@@ -71,39 +62,57 @@ function drawMap() {
   svg.replaceChildren();
   const { W, H, left, right, top, bottom } = geometry;
   const plotW = W - left - right, plotH = H - top - bottom;
-  const all = [...lastModel.candidates, ...lastBench];
-  const xMaxCm = Math.max(50, Math.ceil(Math.max(0, ...all.map((r) => r.rangeResolutionM * 100)) * 1.1 / 5) * 5);
-  const yMaxMs = Math.max(6, Math.ceil(Math.max(0, ...all.map((r) => r.maxVelocityMs)) * 1.13));
+  const all = lastModel.frontier;
+  let maxResolutionCm = 0;
+  let maxSpeedMs = 0;
+  for (const row of all) {
+    maxResolutionCm = Math.max(maxResolutionCm, row.rangeResolutionM * 100);
+    maxSpeedMs = Math.max(maxSpeedMs, row.maxVelocityMs);
+  }
+  const xMaxCm = Math.max(50, Math.ceil(maxResolutionCm * 1.1 / 5) * 5);
+  const yMaxMs = Math.max(6, Math.ceil(maxSpeedMs * 1.13));
   plotLimits = { xMaxCm, yMaxMs };
   const x = (cm) => left + cm / xMaxCm * plotW;
   const y = (speed) => top + plotH - speed / yMaxMs * plotH;
 
   svgElement("rect", { x: left, y: top, width: plotW, height: plotH, class: "feasible-empty" });
   const speeds = [...new Set([0, yMaxMs,
-    ...lastModel.frontier.map((row) => row.maxVelocityMs),
-    ...lastBench.map((row) => row.maxVelocityMs)])]
+    ...lastModel.frontier.map((row) => row.maxVelocityMs)])]
     .filter((speed) => speed >= 0 && speed <= yMaxMs)
     .sort((a, b) => a - b);
   const modelBands = [];
-  const benchBands = [];
   for (let i = 0; i < speeds.length - 1; i++) {
     const speed = (speeds[i] + speeds[i + 1]) / 2;
     const yTop = y(speeds[i + 1]);
     const stripH = y(speeds[i]) - yTop + .5;
-    const modelMin = bestResolutionAtSpeed(lastModel.candidates, speed);
+    const modelMin = bestResolutionAtSpeed(lastModel.frontier, speed);
     if (Number.isFinite(modelMin)) {
       const begin = x(modelMin * 100);
       modelBands.push({ x: begin, y: yTop, width: Math.max(0, W - right - begin), height: stripH });
     }
-    const benchMin = bestResolutionAtSpeed(lastBench, speed);
-    if (Number.isFinite(benchMin)) {
-      const begin = x(benchMin * 100);
-      benchBands.push({ x: begin, y: yTop, width: Math.max(0, W - right - begin), height: stripH });
-    }
   }
   for (const band of modelBands) svgElement("rect", { ...band, class: "feasible-model" });
-  if (benchOverlayInput.checked) {
-    for (const band of benchBands) svgElement("rect", { ...band, class: "feasible-bench" });
+  if (samplePointsInput.checked) {
+    const visible = lastModel.candidates.filter((row) =>
+      row.rangeResolutionM * 100 <= xMaxCm && row.maxVelocityMs <= yMaxMs);
+    const stride = Math.max(1, Math.ceil(visible.length / 850));
+    for (let i = 0; i < visible.length; i += stride) {
+      const row = visible[i];
+      svgElement("circle", { cx: x(row.rangeResolutionM * 100), cy: y(row.maxVelocityMs),
+        r: 1.7, class: "sample-point" });
+    }
+  }
+  if (lastModel.frontier.length) {
+    const frontier = lastModel.frontier;
+    let path = `M ${x(frontier[0].rangeResolutionM * 100)} ${y(0)}`;
+    for (let i = 0; i < frontier.length; i++) {
+      path += ` L ${x(frontier[i].rangeResolutionM * 100)} ${y(frontier[i].maxVelocityMs)}`;
+      if (i + 1 < frontier.length) {
+        path += ` L ${x(frontier[i + 1].rangeResolutionM * 100)} ${y(frontier[i].maxVelocityMs)}`;
+      }
+    }
+    path += ` L ${W - right} ${y(frontier.at(-1).maxVelocityMs)}`;
+    svgElement("path", { d: path, class: "envelope-line" });
   }
   for (let cm = 0; cm <= xMaxCm; cm += xMaxCm > 70 ? 20 : 10) {
     const px = x(cm);
@@ -122,22 +131,18 @@ function drawMap() {
   yLabel.setAttribute("transform", `rotate(-90 20 ${top + plotH / 2})`);
 
   snapTargets = [];
+  for (const row of lastModel.frontier) {
+    snapTargets.push({ resolutionCm: row.rangeResolutionM * 100, speedMs: row.maxVelocityMs,
+      profile: "Sampled envelope point" });
+    svgElement("circle", { cx: x(row.rangeResolutionM * 100), cy: y(row.maxVelocityMs),
+      r: 2.8, class: "envelope-point" });
+  }
   for (const row of lastModel.summaries) {
     const label = `${BIN_NAMES[row.fftBins]} modeled option: ${(row.rangeResolutionM * 100).toFixed(1)} cm, ±${row.maxVelocityMs.toFixed(2)} m/s`;
     snapTargets.push({ resolutionCm: row.rangeResolutionM * 100, speedMs: row.maxVelocityMs,
       profile: `${BIN_NAMES[row.fftBins]} modeled option` });
     const point = svgElement("circle", { cx: x(row.rangeResolutionM * 100), cy: y(row.maxVelocityMs), r: 6,
       class: "model-point", role: "img", tabindex: "0", "aria-label": label });
-    const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
-    title.textContent = label;
-    point.appendChild(title);
-  }
-  for (const row of lastBench) {
-    const label = `${row.name}: ${(row.rangeResolutionM * 100).toFixed(1)} cm, ±${row.maxVelocityMs.toFixed(2)} m/s; ${row.packets} packets`;
-    snapTargets.push({ resolutionCm: row.rangeResolutionM * 100, speedMs: row.maxVelocityMs,
-      profile: `${row.name} bench pass` });
-    const point = svgElement("circle", { cx: x(row.rangeResolutionM * 100), cy: y(row.maxVelocityMs), r: 6,
-      class: "bench-point", role: "img", tabindex: "0", "aria-label": label });
     const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
     title.textContent = label;
     point.appendChild(title);
@@ -155,22 +160,15 @@ function renderTables() {
   document.getElementById("envelopeTable").innerHTML = summaries.length ?
     `<table class="summary-table"><thead><tr><th>Option</th><th>Range detail</th><th>Max speed</th></tr></thead><tbody>${summaries.map((row) =>
       `<tr><td>${BIN_NAMES[row.fftBins]}</td><td>${(row.rangeResolutionM * 100).toFixed(1)} cm</td><td>±${row.maxVelocityMs.toFixed(2)} m/s</td></tr>`).join("")}</tbody></table>` :
-    `<p class="list-note">No software-eligible option for these fixed requirements.</p>`;
-  document.getElementById("benchTable").innerHTML = lastBench.length ?
-    `<table class="summary-table"><thead><tr><th>Output gate</th><th>Detail</th><th>Max speed</th><th>Packets</th></tr></thead><tbody>${lastBench.map((row) =>
-      `<tr><td>${row.rangeGateM.toFixed(1)} m</td><td>${(row.rangeResolutionM * 100).toFixed(1)} cm</td><td>±${row.maxVelocityMs.toFixed(2)}</td><td><span class="status-pill">${row.packets}</span></td></tr>`).join("")}</tbody></table>` :
-    `<p class="list-note">No exact bench packet check meets these fixed requirements.</p>`;
+    `<p class="list-note">No eligible option found in this sample.</p>`;
 }
 
 function render() {
   const requirements = readInputs();
-  lastModel = aopPossibilities(requirements);
-  lastBench = BENCH_PACKET_PASSES.filter((row) =>
-    row.frameRateHz === requirements.frameRateHz &&
-    row.rangeGateM >= requirements.requiredRangeM &&
-    row.usableRangeM >= requirements.requiredRangeM &&
-    row.velocityResolutionMs <= requirements.velocityResolutionLimitMs);
+  lastModel = aopSampleProfiles({ ...requirements,
+    sampleCount: PROFILE_SAMPLE_COUNT, seed: PROFILE_SAMPLE_SEED });
   document.getElementById("emptyMessage").hidden = lastModel.candidates.length > 0;
+  sampleStats.textContent = `${lastModel.stats.sampledTrials.toLocaleString()} seeded trials + ${lastModel.stats.anchorProfiles.toLocaleString()} target-directed profiles · ${lastModel.candidates.length.toLocaleString()} eligible · ${lastModel.frontier.length.toLocaleString()} envelope points · seed ${lastModel.stats.seed}`;
   drawMap();
   renderTables();
 }
@@ -179,7 +177,7 @@ for (const input of Object.values(inputs)) input.addEventListener("change", () =
   selected.profile = null;
   render();
 });
-benchOverlayInput.addEventListener("change", drawMap);
+samplePointsInput.addEventListener("change", drawMap);
 svg.addEventListener("click", (event) => {
   const point = svg.createSVGPoint();
   point.x = event.clientX;

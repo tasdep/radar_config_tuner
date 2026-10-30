@@ -7,18 +7,18 @@ the SDK **03.06.02.00** xWR64xx object-detection demo and its 768 KiB L3 build.
 [Open the hosted Radar Config Tuner](https://tasdep.github.io/radar_config_tuner/).
 
 The [Possibilities view](https://tasdep.github.io/radar_config_tuner/possibilities.html)
-is a summary map for the pinned IWR6843AOP demo. Set frame rate, minimum
-usable range, and required velocity resolution; the remaining two axes are
-maximum allowed range resolution and minimum required maximum radial speed.
-Gray means the bounded SDK search found no supported profile, pale green means
-software eligible, and dark green means an exact profile passed a short UART
-packet check on the 2026-10-30 AOP/ICBOOST bench. The checkbox hides the dark
-green area while keeping the tested dots visible. Click near a corner dot to
-select that profile's exact modeled values, or click elsewhere to inspect a
-target pair. The detailed chirp controls remain in **Advanced tuner**. The
-current search is specialized for these three fixed inputs; it cannot safely
-swap any three of the five metrics without a broader profile search. Bench
-packet output does not establish measured range or velocity performance.
+samples quantized profiles for the pinned IWR6843AOP demo. Set frame rate,
+minimum usable range, and required velocity resolution; the remaining two
+axes are maximum allowed range resolution and minimum required maximum radial
+speed. A fixed seed drives 20,000 stratified trials across ADC counts, sample
+rates, start frequencies, slopes, ramps, even loop counts, and idle times;
+the earlier target-directed search supplies additional candidates. The sampled
+non-dominated profiles form the feasible envelope. Gray
+means no eligible profile was found in that sample; it does not prove
+impossibility. Click near a boundary dot to select its exact modeled values,
+or click elsewhere to inspect a target pair. The detailed chirp controls
+remain in **Advanced tuner**. The current search is specialized for these
+three fixed inputs.
 
 The tool is intentionally simple:
 
@@ -76,7 +76,7 @@ node check-config.js path/to/profile.cfg
 node check-config.js --max-doppler-resolution 0.051 path/to/profile.cfg
 node check-config.js --json path/to/profile.cfg
 node sweep-aop.js --json > sweep.json
-node --test config-analysis.test.js aop-possibilities.test.js
+node --test config-analysis.test.js aop-possibilities.test.js aop-profile-sampler.test.js
 ```
 
 Exit status is 0 when no modeled hard limit is exceeded, 1 for a modeled

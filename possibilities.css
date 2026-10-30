@@ -12,10 +12,10 @@
 .status-key span { display: inline-flex; align-items: center; gap: 5px; }
 .overlay-toggle { display: inline-flex; align-items: center; gap: 7px; margin: 9px 0 0; color: var(--ink); font-size: 14px; cursor: pointer; }
 .overlay-toggle input { width: 16px; height: 16px; margin: 0; accent-color: #268575; }
-.no-symbol, .model-symbol, .bench-symbol { display: inline-block; width: 13px; height: 13px; border-radius: 3px; }
+.sample-stats { margin: 6px 0 0; color: var(--muted); font-size: 13px; }
+.no-symbol, .model-symbol { display: inline-block; width: 13px; height: 13px; border-radius: 3px; }
 .no-symbol { background: #e4e9eb; }
 .model-symbol { background: #b9e4df; }
-.bench-symbol { background: #268575; }
 #possibilityPlot { display: block; width: 100%; height: auto; max-height: 600px; }
 #possibilityPlot .axis { stroke: #6b7780; stroke-width: 1; }
 #possibilityPlot .gridline { stroke: #dae1e5; stroke-width: 1; }
@@ -23,15 +23,16 @@
 #possibilityPlot .axis-label { fill: #25333d; font-size: 15px; font-weight: 600; }
 #possibilityPlot .feasible-empty { fill: #e4e9eb; }
 #possibilityPlot .feasible-model { fill: #b9e4df; }
-#possibilityPlot .feasible-bench { fill: #268575; }
+#possibilityPlot .sample-point { fill: #185b69; opacity: .22; pointer-events: none; }
+#possibilityPlot .envelope-line { fill: none; stroke: #15545f; stroke-width: 2.5; pointer-events: none; }
+#possibilityPlot .envelope-point { fill: #15545f; stroke: #fff; stroke-width: .7; cursor: pointer; }
 #possibilityPlot .model-point { fill: #fff; stroke: #1c5f68; stroke-width: 2.5; }
-#possibilityPlot .bench-point { fill: #102b30; stroke: #fff; stroke-width: 2; }
-#possibilityPlot .model-point, #possibilityPlot .bench-point { cursor: pointer; }
+#possibilityPlot .model-point { cursor: pointer; }
 #possibilityPlot .selection-line { stroke: #23343b; stroke-width: 1.5; stroke-dasharray: 5 4; }
 #possibilityPlot .selection-point { fill: #fff; stroke: #23343b; stroke-width: 2.5; }
 .plot-detail { min-height: 22px; margin: 0; color: var(--ink); font-size: 14px; }
 .empty-message { margin: 16px 0; color: var(--bad); font-weight: 700; }
-.possibilities-lists { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.possibilities-lists { display: grid; grid-template-columns: 1fr; gap: 18px; }
 .possibilities-lists .panel { min-width: 0; padding: 18px; }
 .summary-table { border-collapse: collapse; width: 100%; margin-top: 10px; font-size: 14px; }
 .summary-table th, .summary-table td { padding: 9px 5px; border-bottom: 1px solid var(--line); text-align: left; }

@@ -11,7 +11,7 @@
     <header class="topbar">
       <div>
         <h1>Radar Possibilities</h1>
-        <p>Set frame rate, range, and velocity resolution to explore the remaining tradeoff.</p>
+        <p>Explore a reproducible sample of the range-detail and radial-speed tradeoff.</p>
         <nav class="view-tabs" aria-label="Tuner views">
           <a href="possibilities.html" aria-current="page">Possibilities</a>
           <a href="index.html">Advanced tuner</a>
@@ -29,36 +29,32 @@
       <section class="possibilities-chart panel" aria-labelledby="chartTitle">
         <div class="chart-heading">
           <div>
-            <h2 id="chartTitle">Feasibility map</h2>
+            <h2 id="chartTitle">Sampled feasibility map</h2>
             <p>Choose a range resolution cap along the bottom and a required maximum radial speed on the left.</p>
           </div>
           <div class="status-key" aria-label="Evidence status">
-            <span><i class="no-symbol" aria-hidden="true"></i> No modeled profile</span>
+            <span><i class="no-symbol" aria-hidden="true"></i> No sampled profile found</span>
             <span><i class="model-symbol" aria-hidden="true"></i> SDK model eligible</span>
-            <span><i class="bench-symbol" aria-hidden="true"></i> Exact profile passed packet check</span>
           </div>
         </div>
-        <label class="overlay-toggle"><input id="benchOverlayInput" type="checkbox" checked> Show dark green bench area</label>
+        <label class="overlay-toggle"><input id="samplePointsInput" type="checkbox" checked> Show sampled profiles</label>
+        <p id="sampleStats" class="sample-stats" aria-live="polite"></p>
         <svg id="possibilityPlot" viewBox="0 0 900 500" role="img" aria-label="Feasibility of range resolution and maximum radial speed targets for the selected frame rate, range, and velocity resolution"></svg>
         <p id="plotDetail" class="plot-detail" aria-live="polite"></p>
-        <p id="emptyMessage" class="empty-message" hidden>No profile meets the fixed requirements with the 50% active-chirp limit. Reduce the frame rate, range, or velocity-detail demand.</p>
+        <p id="emptyMessage" class="empty-message" hidden>No eligible profile was found in this sample. Try a lower frame rate, shorter range, or coarser velocity resolution.</p>
       </section>
 
       <section class="possibilities-lists">
         <div class="panel">
-          <h2>Best modeled options</h2>
+          <h2>Sampled envelope options</h2>
           <div id="envelopeTable"></div>
         </div>
-        <div class="panel">
-          <h2>Bench packet passes</h2>
-          <p class="list-note">Exact profiles that meet the fixed inputs and started, sent decoded packets and stopped on one AOP/ICBOOST. Their range and speed remain predictions.</p>
-          <div id="benchTable"></div>
-        </div>
       </section>
-      <p class="scope-note">Pinned to mmWave SDK 03.06.02.00 xwr64xx AOP demo, 3 TX × 4 RX, ≤50% active chirps, modeled L3 use ≤768 KiB, 0.1 m range margin and ≤63.9 GHz RF end. The 1024 FFT-bin path is excluded after an SDK support warning and a bench CLI failure. Packet passes do not verify target separation or speed limits.</p>
+      <p class="scope-note">Seeded profile sample for the mmWave SDK 03.06.02.00 xwr64xx AOP demo, 3 TX × 4 RX, ≤50% active chirps, modeled L3 use ≤768 KiB, 0.1 m range margin and ≤63.9 GHz RF end. The SDK documents the 1024 FFT-bin 3-TX/4-RX path as unsupported, so it is excluded. Gray means no profile was found in this sample, not that a profile is impossible.</p>
     </main>
     <script src="sdk36-aop-limits.js?v=sdk36-aop-4"></script>
     <script src="aop-possibilities.js?v=2"></script>
-    <script src="possibilities.js?v=2"></script>
+    <script src="aop-profile-sampler.js?v=1"></script>
+    <script src="possibilities.js?v=3"></script>
   </body>
 </html>
