@@ -145,7 +145,8 @@ button:hover,
   font-size: 13px;
 }
 
-.field select {
+.field select,
+.field input[type="number"] {
   width: 100%;
   min-height: 36px;
   border: 1px solid var(--line);

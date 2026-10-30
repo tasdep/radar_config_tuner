@@ -1,7 +1,7 @@
 // Read-only analysis of SDK 3.x frame configs with one TDM chirp per TX.
 const aopLimits = typeof module !== "undefined" ?
   require("./sdk36-aop-limits.js") : aopSdk36Limits;
-const CONFIG_SPEED_OF_LIGHT = 299792458;
+const CONFIG_SPEED_OF_LIGHT = 3e8; // mmwdemo_rfparser.c:96
 
 function analyzeConfig(text) {
   const commands = new Map();
@@ -74,42 +74,103 @@ function analyzeConfig(text) {
   const slopeMHzUs = number(profile[7], "profileCfg frequency slope", { min: 0 });
   const samples = number(profile[9], "profileCfg ADC samples", { min: 0, integer: true });
   const sampleRateKsps = number(profile[10], "profileCfg sample rate", { min: 0 });
+  const hpf2Code = number(profile[12], "profileCfg HPF2 code", { min: -1, integer: true });
+  const hpf2Hz = [350000, 700000, 1400000, 2800000][hpf2Code];
   const txCount = sequence.length;
-  const rangeBins = 2 ** Math.ceil(Math.log2(samples));
+  let rangeBins = 2 ** Math.ceil(Math.log2(samples));
+  let fftRangeBins = rangeBins;
   const adcSeconds = samples / (sampleRateKsps * 1000);
-  const slopeHzS = slopeMHzUs * 1e12;
-  const bandwidthHz = slopeHzS * adcSeconds;
-  const chirpSeconds = (idleUs + rampUs) * 1e-6;
-  const centerHz = startGHz * 1e9 + slopeHzS * (adcStartUs * 1e-6 + adcSeconds / 2);
+  let slopeHzS = slopeMHzUs * 1e12;
+  let bandwidthHz = slopeHzS * adcSeconds;
+  let chirpSeconds = (idleUs + rampUs) * 1e-6;
+  let centerHz = startGHz * 1e9 + slopeHzS * (adcStartUs * 1e-6 + adcSeconds / 2);
   const chirpsPerFrame = txCount * loops;
-  const activeMs = chirpsPerFrame * chirpSeconds * 1000;
-  const rangeResolutionM = CONFIG_SPEED_OF_LIGHT / (2 * bandwidthHz);
-  const rangeBinM = CONFIG_SPEED_OF_LIGHT * sampleRateKsps * 1000 / (2 * slopeHzS * rangeBins);
-  const fftRangeSpanM = rangeBinM * rangeBins;
+  let activeMs = chirpsPerFrame * chirpSeconds * 1000;
+  let rangeResolutionM = CONFIG_SPEED_OF_LIGHT / (2 * bandwidthHz);
+  let rangeBinM = CONFIG_SPEED_OF_LIGHT * sampleRateKsps * 1000 / (2 * slopeHzS * rangeBins);
+  let fftRangeSpanM = rangeBinM * rangeBins;
+  let lastRangeBinM = rangeBinM * (rangeBins - 1);
   const usableBeatHz = Math.min(sampleRateKsps * 1000 * 0.8, 10e6);
-  const usableRangeM = CONFIG_SPEED_OF_LIGHT * usableBeatHz / (2 * slopeHzS);
-  const endGHz = startGHz + slopeMHzUs * rampUs / 1000;
-  const maxVelocityMs = CONFIG_SPEED_OF_LIGHT / (4 * centerHz * chirpSeconds * txCount);
-  const velocityResolutionMs = CONFIG_SPEED_OF_LIGHT / (2 * centerHz * chirpSeconds * chirpsPerFrame);
+  let usableRangeM = CONFIG_SPEED_OF_LIGHT * usableBeatHz / (2 * slopeHzS);
+  let endGHz = startGHz + slopeMHzUs * rampUs / 1000;
+  let maxVelocityMs = CONFIG_SPEED_OF_LIGHT / (4 * centerHz * chirpSeconds * txCount);
+  let velocityResolutionMs = CONFIG_SPEED_OF_LIGHT / (2 * centerHz * chirpSeconds * chirpsPerFrame);
+  let dopplerStepMs = CONFIG_SPEED_OF_LIGHT /
+    (2 * 2 ** Math.ceil(Math.log2(loops)) * centerHz * chirpSeconds * txCount);
+  let hpf2CornerRangeM = hpf2Hz ? CONFIG_SPEED_OF_LIGHT * hpf2Hz / (2 * slopeHzS) : null;
   const platform = text.match(/^%\s*Platform\s*:\s*(\S+)/m)?.[1];
   const isSdk36Aop = platform === "xWR68xx_AOP";
   const errors = [];
   let l3 = null;
+  let quantizedProfile = null;
   if (loops > aopLimits.AOP_SDK36_LIMITS.maxFrameLoops) {
     errors.push(`frameCfg loops ${loops} exceeds mmWaveLink's 1–255 limit.`);
   }
   if (isSdk36Aop) {
-    if (endGHz > 64) errors.push(`Chirp sweep ends at ${endGHz.toFixed(3)} GHz, above the 64 GHz device band limit.`);
-    if (rangeBins > 1024) errors.push("SDK 3.6 AOP range FFT exceeds the 1024-bin range DPU limit.");
+    if (sequence.length > 32) errors.push("SDK 3.6 AOP RF parser supports at most 32 unique frame chirps.");
+    if (loops % 2) errors.push("SDK 3.6 AOP range HWA requires an even number of Doppler loops for ping/pong processing.");
+    if (samples < 64 || samples > 1024) errors.push("SDK 3.6 AOP range HWA requires 64–1024 ADC samples.");
+    if (sampleRateKsps < 2000 || sampleRateKsps > 12500) {
+      errors.push("xWR6843 complex-1x ADC sample rate must be 2000–12500 ksps.");
+    }
+    const adc = one("adcCfg");
+    if (Number(adc[0]) !== 2 || Number(adc[1]) !== 1) {
+      errors.push("SDK 3.6 AOP range HWA requires 16-bit complex ADC output (adcCfg 2 1).");
+    }
+    const adcbuf = one("adcbufCfg");
+    if (Number(adcbuf[1]) !== 0 || Number(adcbuf[2]) !== 1 || Number(adcbuf[4]) !== 1) {
+      errors.push("SDK 3.6 AOP requires complex IMRE ADC buffer and chirp threshold 1 (adcbufCfg -1 0 1 ... 1).");
+    }
     const channel = one("channelCfg");
     const rxMask = number(channel[0], "channelCfg RX mask", { min: 0, integer: true });
     const txMask = number(channel[1], "channelCfg TX mask", { min: 0, integer: true });
     const rxCount = rxMask.toString(2).replace(/0/g, "").length;
-    if (rxMask > 15 || rxCount > 4) errors.push("AOP channelCfg RX mask exceeds four channels.");
+    if (rxMask > 15 || ![1, 2, 4].includes(rxCount)) errors.push("AOP range HWA supports 1, 2, or 4 RX channels.");
     if (txMask > 7 || sequence.some((item) => !(item.txMask & txMask))) {
       errors.push("AOP chirpCfg uses a TX channel not enabled by channelCfg.");
     }
-    l3 = aopLimits.aopL3Usage({ adcSamples: samples, loops, txCount, rxCount });
+    quantizedProfile = aopLimits.aopQuantizedProfile({
+      startGHz, idleUs, adcStartUs, rampUs, slopeMHzUs,
+      adcSamples: samples, sampleRateKsps, loops, txCount, rxCount,
+    });
+    l3 = quantizedProfile.l3;
+    if (l3.fftRangeBins === 1024 && txCount === 3 && rxCount === 4) {
+      errors.push("SDK 3.6 range HWA documents a 1024-bin 3 TX × 4 RX radar cube as unsupported (EDMA address jump). The demo reduces it to 1022 processed bins, but that path lost CLI on the tested AOP UART image at 576 samples/14 loops; treat this FFT mode as unvalidated for this image.");
+    }
+    fftRangeBins = l3.fftRangeBins;
+    rangeBins = l3.rangeBins;
+    slopeHzS = quantizedProfile.actualSlopeMHzUs * 1e12;
+    bandwidthHz = slopeHzS * adcSeconds;
+    chirpSeconds = quantizedProfile.chirpSeconds;
+    centerHz = quantizedProfile.centerHz;
+    activeMs = chirpsPerFrame * chirpSeconds * 1000;
+    rangeResolutionM = quantizedProfile.rangeResolutionM;
+    rangeBinM = quantizedProfile.rangeStepM;
+    fftRangeSpanM = quantizedProfile.fftRangeSpanM;
+    lastRangeBinM = quantizedProfile.lastRangeBinM;
+    usableRangeM = quantizedProfile.usableRangeM;
+    endGHz = quantizedProfile.endGHz;
+    maxVelocityMs = quantizedProfile.maxVelocityMs;
+    velocityResolutionMs = quantizedProfile.dopplerResolutionMs;
+    dopplerStepMs = quantizedProfile.dopplerStepMs;
+    hpf2CornerRangeM = hpf2Hz ? CONFIG_SPEED_OF_LIGHT * hpf2Hz / (2 * slopeHzS) : null;
+    if (hpf2Hz === undefined) errors.push("profileCfg HPF2 code must be 0–3.");
+    // A nominal 60.000 GHz CLI start truncates by one 40 Hz register LSB.
+    const bandToleranceGHz = 1e-6;
+    const inLowBand = quantizedProfile.actualStartGHz >= 57 - bandToleranceGHz &&
+      endGHz <= 60.75 + bandToleranceGHz;
+    const inHighBand = quantizedProfile.actualStartGHz >= 60 - bandToleranceGHz &&
+      endGHz <= 64 + bandToleranceGHz;
+    if (!inLowBand && !inHighBand) {
+      errors.push(`Quantized chirp sweep ${quantizedProfile.actualStartGHz.toFixed(3)}–${endGHz.toFixed(3)} GHz is outside one permitted 60 GHz VCO band.`);
+    }
+    if (quantizedProfile.startRegister % 2) errors.push("60 GHz start-frequency register must be even.");
+    if (quantizedProfile.slopeRegister <= 0) errors.push("Quantized profile slope is zero or negative.");
+    if (adcStartUs + adcSeconds * 1e6 > rampUs) errors.push("ADC capture extends beyond the ramp end time.");
+    if (frameMs - activeMs < 0.3) errors.push("Frame needs at least 300 µs interframe blanking after chirps.");
+    if (rxCount * Math.ceil(samples * 4 / 16) * 16 > aopLimits.AOP_SDK36_LIMITS.adcBufBytes) {
+      errors.push("One chirp of complex RX samples exceeds the 32 KiB ADC buffer.");
+    }
     if (l3.freeBytes < 0) {
       errors.push(`SDK 3.6 AOP L3 needs ${(l3.usedBytes / 1024).toFixed(1)} KiB (cube + detection matrix); only 768 KiB is available.`);
     }
@@ -135,16 +196,13 @@ function analyzeConfig(text) {
   if (l3 && l3.freeBytes >= 0 && l3.freeBytes < 64 * 1024) {
     warnings.push(`SDK 3.6 AOP L3 headroom is only ${(l3.freeBytes / 1024).toFixed(1)} KiB; verify on hardware.`);
   }
-  if (isSdk36Aop && rangeBins === 256 && (loops === 59 || loops === 61)) {
-    warnings.push(`Bench observation: this 256-bin/${loops}-loop shape triggered an EDMA assertion with one AOP UART build; this is not a proven general hardware limit.`);
-  }
   if (isSdk36Aop && rangeBins === 512 && loops === 30) {
     warnings.push("Bench observation: one 512-bin/30-loop AOP UART profile started but yielded no valid packets; this is not a proven general hardware limit.");
   }
   if (adcStartUs + adcSeconds * 1e6 > rampUs) warnings.push("ADC capture extends beyond the ramp end time.");
   if (activeMs > frameMs) warnings.push("Active chirps exceed the configured frame period.");
-  if (fov[0] && (fov[0][0] < 0 || fov[0][1] > fftRangeSpanM)) {
-    warnings.push("Range FoV extends beyond the calculated FFT range span.");
+  if (fov[0] && (fov[0][0] < 0 || fov[0][1] > lastRangeBinM)) {
+    warnings.push("Range FoV extends beyond the final processed range-bin center.");
   }
   if (isSdk36Aop && fov[0] && fov[0][1] > usableRangeM) {
     warnings.push(`Range FoV extends beyond TI's 80% IF usable-range estimate (${usableRangeM.toFixed(2)} m).`);
@@ -156,11 +214,12 @@ function analyzeConfig(text) {
     profileId: sequence[0].profileId, startGHz, idleUs, adcStartUs, rampUs,
     slopeMHzUs, samples, sampleRateKsps, txCount, loops, frameMs, chirpsPerFrame,
     adcUs: adcSeconds * 1e6, bandwidthMHz: bandwidthHz / 1e6,
-    centerGHz: centerHz / 1e9, rangeBins, rangeResolutionM,
-    rangeBinM, rangeSpanM: fftRangeSpanM, usableRangeM, endGHz,
-    maxVelocityMs, velocityResolutionMs, activeMs,
+    centerGHz: centerHz / 1e9, rangeBins, fftRangeBins, rangeResolutionM,
+    rangeBinM, rangeSpanM: fftRangeSpanM, lastRangeBinM, usableRangeM, endGHz,
+    maxVelocityMs, velocityResolutionMs, dopplerStepMs, hpf2Code,
+    hpf2CornerRangeM, activeMs,
     dutyPercent: activeMs / frameMs * 100, frameRateHz: 1000 / frameMs,
-    platform, fov, thresholds, l3, errors, warnings,
+    platform, fov, thresholds, l3, quantizedProfile, errors, warnings,
   };
 }
 
@@ -210,7 +269,8 @@ if (typeof document !== "undefined") {
         ["FFT range span", `${fixed(data.rangeSpanM)} m`, "Calculated span before any range FoV gate."],
         ["Estimated usable range", `${fixed(data.usableRangeM)} m`, "TI's 80% ADC IF visibility model for complex 6843/1843 chirps."],
         ["Maximum radial velocity", `${fixed(data.maxVelocityMs, 3)} m/s`, "Estimated unambiguous radial speed."],
-        ["Velocity resolution", `${fixed(data.velocityResolutionMs, 4)} m/s`, "Estimated Doppler bin spacing."],
+        ["Nominal Doppler resolution", `${fixed(data.velocityResolutionMs, 6)} m/s`, "SDK parser scale from the actual chirp count."],
+        ["Doppler FFT bin step", `${fixed(data.dopplerStepMs, 6)} m/s`, "Point-cloud velocity-bin spacing after FFT padding."],
         ["Frame rate", `${fixed(data.frameRateHz, 2)} Hz`, "Frames produced per second from frameCfg."],
         ["Active chirp duty", `${fixed(data.dutyPercent, 1)}%`, "Time spent on configured chirps within each frame."],
       ];
@@ -233,6 +293,8 @@ if (typeof document !== "undefined") {
         ["ADC start / capture time", `${fixed(data.adcStartUs)} / ${fixed(data.adcUs)} us`],
         ["Slope / bandwidth", `${fixed(data.slopeMHzUs, 2)} MHz/us / ${fixed(data.bandwidthMHz, 1)} MHz`],
         ["Samples / sample rate", `${data.samples} / ${fixed(data.sampleRateKsps)} ksps`],
+        ["HPF2 corner equivalent", data.hpf2CornerRangeM === null ? "Unknown" :
+          `${fixed(data.hpf2CornerRangeM, 2)} m (analog attenuation, not a cutoff)`],
       ]);
       addSection("Frame and derived stats", [
         ["TX antennas / loops", `${data.txCount} / ${data.loops}`],

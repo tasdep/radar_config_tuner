@@ -80,12 +80,7 @@
             <h2>Manual Chirp</h2>
             <label class="field">
               <span>ADC samples</span>
-              <select id="adcSamples">
-                <option>64</option>
-                <option selected>128</option>
-                <option>256</option>
-                <option>512</option>
-              </select>
+              <input id="adcSamples" type="number" min="64" max="1024" step="1" value="128">
             </label>
             <div class="slider-row">
               <label for="sampleRate">Sample rate</label>
@@ -95,17 +90,17 @@
             <div class="slider-row">
               <label for="slope">Frequency slope</label>
               <output id="slopeOut"></output>
-              <input id="slope" type="range" min="10" max="120" step="0.1">
+              <input id="slope" type="range" min="10" max="120" step="0.01">
             </div>
             <div class="slider-row">
               <label for="idleTime">Idle time</label>
               <output id="idleTimeOut"></output>
-              <input id="idleTime" type="range" min="10" max="1000" step="1">
+              <input id="idleTime" type="range" min="10" max="5242" step="1">
             </div>
             <div class="slider-row">
               <label for="rampEndTime">Ramp end time</label>
               <output id="rampEndTimeOut"></output>
-              <input id="rampEndTime" type="range" min="10" max="80" step="0.01">
+              <input id="rampEndTime" type="range" min="10" max="5000" step="0.01">
             </div>
             <div class="slider-row">
               <label for="numLoops">Frame loops</label>
@@ -143,15 +138,19 @@
           <h2 class="tuner-heading">Tuner results <small>from the controls at left</small></h2>
           <section class="metrics" aria-label="Derived radar metrics">
             <article class="metric">
-              <span>Velocity Resolution</span>
+              <span>Nominal Doppler Resolution</span>
               <strong id="velocityResolution">-</strong>
+            </article>
+            <article class="metric">
+              <span>Doppler FFT Bin Step</span>
+              <strong id="dopplerStep">-</strong>
             </article>
             <article class="metric">
               <span>Max Radial Velocity</span>
               <strong id="maxVelocity">-</strong>
             </article>
             <article class="metric">
-              <span>Range Resolution</span>
+              <span>Nominal Range Resolution</span>
               <strong id="rangeResolution">-</strong>
             </article>
             <article class="metric">
@@ -220,8 +219,8 @@
       </section>
     </main>
 
-    <script src="sdk36-aop-limits.js?v=sdk36-aop-2"></script>
-    <script src="app.js?v=sdk36-aop-2"></script>
-    <script src="config-analysis.js?v=sdk36-aop-2"></script>
+    <script src="sdk36-aop-limits.js?v=sdk36-aop-3"></script>
+    <script src="config-analysis.js?v=sdk36-aop-3"></script>
+    <script src="app.js?v=sdk36-aop-3"></script>
   </body>
 </html>

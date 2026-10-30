@@ -23,8 +23,12 @@ sliders or send the file to a server. It supports 60 GHz and 77 GHz regular
 Configs using advanced frames, simultaneous TX, or chirp profile variations
 show an explicit error instead of an unreliable estimate. For files marked
 `% Platform:xWR68xx_AOP`, the checker also applies the 1–255 frame-loop limit,
-the demo's radar-cube and detection-matrix allocations, the 1024-bin range FFT
-limit, and the 60–64 GHz chirp sweep boundary. It uses TI's **80% IF** rule for
+the demo's radar-cube and detection-matrix allocations, the even-loop HWA
+requirement, ADC/ADCBUF limits, RF register quantization, and the 60–64 GHz
+chirp sweep boundary. It rejects 1024 range FFT bins with 3 TX and 4 RX:
+the SDK documents this mode as unsupported because of an EDMA address jump,
+and a 576-sample bench profile lost the CLI despite the demo's 1022-bin
+workaround. It uses TI's **80% IF** rule for
 estimated usable range; this is lower than the full FFT range span. The GUI
 solver keeps at least 64 KiB L3 reserve. The manual sliders can reach the
 theoretical memory boundary, which may still fail in the running firmware.
@@ -55,7 +59,9 @@ Check an existing config without a browser:
 
 ```bash
 node check-config.js path/to/profile.cfg
+node check-config.js --max-doppler-resolution 0.051 path/to/profile.cfg
 node check-config.js --json path/to/profile.cfg
+node sweep-aop.js --json > sweep.json
 node --test config-analysis.test.js
 ```
 
@@ -74,15 +80,20 @@ cube plus a 64 KiB detection matrix. Its validation script also lacks a
 tool models those two specific missing constraints from the pinned SDK source;
 it is not a clone of TI's estimator.
 
-For a 20 m usable-range gate and ≤0.051 m/s nominal Doppler bin spacing on
-the tested AOP UART build, 128 samples/112 loops, 256 samples/56 loops, and
-512 samples/28 loops each produced 41 valid packets in four seconds. Their
+For a 20 m usable-range gate and ≤0.051 m/s nominal Doppler resolution on
+the tested AOP UART build, 128 samples/112 loops with idle time corrected to
+122 µs, 256 samples/56 loops, and 512 samples/28 loops each produced 41 valid
+packets in four seconds. The original 128/112 profile at 121 µs idle time
+also passed packet output but calculates to **0.051021 m/s**, narrowly missing
+the hard target. Their
 estimated range resolutions are 0.196, 0.098, and 0.049 m respectively;
-their maximum unambiguous speeds are about ±2.86, ±1.42, and ±0.71 m/s.
+their maximum unambiguous speeds are about ±2.84, ±1.42, and ±0.71 m/s.
 These short tests did not verify a target at 20 m or detection quality.
-The 256-bin 59- and 61-loop profiles asserted in EDMA, while 60 loops ran;
+The 256-bin 59- and 61-loop profiles asserted in EDMA, consistent with the
+SDK's even-loop requirement, while 60 loops ran;
 the 512-bin 30-loop profile started but produced no valid packets twice.
-Those observations are warnings, not universal hardware limits. Use the
+An experimental 576-sample/14-loop profile entered the unsupported 1024 FFT
+mode and stopped the CLI at `sensorStart`. Use the
 64 KiB-reserve solver output as a starting point, then verify the exact image
 and config on hardware.
 

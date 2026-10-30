@@ -1,4 +1,4 @@
-const C = 299792458.0;
+const C = 3e8; // mmwdemo_rfparser.c:96, for SDK-reported metric parity
 const NUM_TX = 3;
 
 const DEVICES = {
@@ -21,7 +21,7 @@ const DEVICES = {
     rxGain: 30,
     comp: "0.0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0",
     defaultDopplerGate: 2.05,
-    maxIfMHz: 10,
+    maxIfMHz: 15,
     maxFreqGHz: 81,
   },
 };
@@ -85,40 +85,53 @@ function fmt(value, digits = 3) {
   return Number(value).toFixed(digits);
 }
 
+function fmtTrim(value, digits = 3) {
+  return fmt(value, digits).replace(/\.?0+$/, "");
+}
+
 function currentDevice() {
   return DEVICES[state.device];
 }
 
 function metricsFor(params) {
   const device = DEVICES[params.device];
+  const sdk = params.device === "6843" ? aopQuantizedProfile({
+    startGHz: device.startFreqGHz, idleUs: params.idleTime,
+    adcStartUs: 7, rampUs: params.rampEndTime, slopeMHzUs: params.slope,
+    adcSamples: params.adcSamples, sampleRateKsps: params.sampleRate,
+    loops: params.numLoops, txCount: NUM_TX,
+  }) : null;
   const sampleRateHz = params.sampleRate * 1000;
-  const slopeHzPerS = params.slope * 1e12;
+  const slopeHzPerS = (sdk ? sdk.actualSlopeMHzUs : params.slope) * 1e12;
   const adcSamples = params.adcSamples;
-  const numRangeBins = nextPowerOfTwo(adcSamples);
+  const numRangeBins = sdk ? sdk.l3.rangeBins : nextPowerOfTwo(adcSamples);
+  const fftRangeBins = sdk ? sdk.l3.fftRangeBins : numRangeBins;
   const adcTime = adcSamples / sampleRateHz;
   const bandwidth = slopeHzPerS * adcTime;
-  const rangeResolution = C / (2 * bandwidth);
-  const rangeStep = C * sampleRateHz / (2 * slopeHzPerS * numRangeBins);
-  const fftRangeSpan = rangeStep * numRangeBins;
+  const rangeResolution = sdk ? sdk.rangeResolutionM : C / (2 * bandwidth);
+  const rangeStep = sdk ? sdk.rangeStepM : C * sampleRateHz / (2 * slopeHzPerS * fftRangeBins);
+  const fftRangeSpan = rangeStep * fftRangeBins;
+  const lastRangeBin = rangeStep * (numRangeBins - 1);
   // TI Sensing Estimator 2.5.1 uses 80% ADC IF visibility in complex mode,
   // further capped by the device's maximum intermediate frequency.
   const usableBeatHz = Math.min(sampleRateHz * 0.8, device.maxIfMHz * 1e6);
-  const usableRange = C * usableBeatHz / (2 * slopeHzPerS);
-  const endFreqGHz = device.startFreqGHz + params.slope * params.rampEndTime / 1000;
-  const chirpPeriod = (params.idleTime + params.rampEndTime) * 1e-6;
+  const usableRange = sdk ? sdk.usableRangeM : C * usableBeatHz / (2 * slopeHzPerS);
+  const endFreqGHz = sdk ? sdk.endGHz : device.startFreqGHz + params.slope * params.rampEndTime / 1000;
+  const chirpPeriod = sdk ? sdk.chirpSeconds : (params.idleTime + params.rampEndTime) * 1e-6;
   const framePeriod = 1 / params.frameRate;
   const activeTime = NUM_TX * params.numLoops * chirpPeriod;
   const duty = activeTime / framePeriod;
-  const centerFreq =
-    device.startFreqGHz * 1e9 +
-    slopeHzPerS * (7e-6 + adcTime / 2);
-  const maxVelocity = C / (4 * centerFreq * chirpPeriod * NUM_TX);
-  const velocityResolution =
+  const centerFreq = sdk ? sdk.centerHz :
+    device.startFreqGHz * 1e9 + slopeHzPerS * (7e-6 + adcTime / 2);
+  const maxVelocity = sdk ? sdk.maxVelocityMs : C / (4 * centerFreq * chirpPeriod * NUM_TX);
+  const velocityResolution = sdk ? sdk.dopplerResolutionMs :
     C / (2 * centerFreq * chirpPeriod * NUM_TX * params.numLoops);
+  const dopplerStep = sdk ? sdk.dopplerStepMs :
+    C / (2 * centerFreq * chirpPeriod * NUM_TX * nextPowerOfTwo(params.numLoops));
   const chirpsPerFrame = NUM_TX * params.numLoops;
-  const adcFits = adcTime * 1e6 + 7 <= params.rampEndTime;
-  const l3 = params.device === "6843" ?
-    aopL3Usage({ adcSamples, loops: params.numLoops, txCount: NUM_TX }) : null;
+  const adcFits = adcTime * 1e6 + (sdk ? sdk.actualAdcStartUs : 7) <=
+    (sdk ? sdk.actualRampUs : params.rampEndTime);
+  const l3 = sdk ? sdk.l3 : null;
 
   return {
     sampleRateHz,
@@ -128,6 +141,7 @@ function metricsFor(params) {
     rangeResolution,
     rangeStep,
     fftRangeSpan,
+    lastRangeBin,
     usableRange,
     endFreqGHz,
     chirpPeriod,
@@ -137,10 +151,14 @@ function metricsFor(params) {
     centerFreq,
     maxVelocity,
     velocityResolution,
+    dopplerStep,
     chirpsPerFrame,
     numRangeBins,
+    fftRangeBins,
     adcFits,
     l3,
+    sdk,
+    hpf2CornerRangeM: C * 350000 / (2 * slopeHzPerS),
   };
 }
 
@@ -153,13 +171,12 @@ function dutyBudget() {
 }
 
 function targetBounds() {
-  const adcBins = nextPowerOfTwo(state.adcSamples);
   const sampleRateHz = state.sampleRate * 1000;
   const device = currentDevice();
   const adcTimeUs = state.adcSamples / sampleRateHz * 1e6;
   const minRampUs = Math.max(10, Math.ceil(adcTimeUs + 9));
-  const rangeSpanFromTarget = state.rangeResolutionTarget * adcBins * 0.8;
-  const minRangeResolutionForGate = state.rangeGate / (adcBins * 0.8);
+  const rangeSpanFromTarget = state.rangeResolutionTarget * state.adcSamples * 0.8;
+  const minRangeResolutionForGate = state.rangeGate / (state.adcSamples * 0.8);
   const centerFreq =
     device.startFreqGHz * 1e9 +
     state.slope * 1e12 * (7e-6 + (state.adcSamples / sampleRateHz) / 2);
@@ -182,7 +199,7 @@ function targetBounds() {
     rangeGate: {
       min: 2,
       max: Math.max(2, Math.min(30, rangeSpanFromTarget)),
-      text: `range res target gives ~${fmt(rangeSpanFromTarget, 1)} m usable (80% IF) with ${adcBins} bins`,
+      text: `range res target gives ~${fmt(rangeSpanFromTarget, 1)} m usable (80% IF) with ${state.adcSamples} samples`,
     },
     maxVelocityTarget: {
       min: 0.5,
@@ -197,7 +214,7 @@ function targetBounds() {
     rangeResolutionTarget: {
       min: Math.max(0.03, Math.min(0.5, minRangeResolutionForGate)),
       max: 0.5,
-      text: `output range needs at least ${fmt(minRangeResolutionForGate, 3)} m with 80% IF and ${adcBins} bins`,
+      text: `output range needs at least ${fmt(minRangeResolutionForGate, 3)} m with 80% IF and ${state.adcSamples} samples`,
     },
     dutyLimit: {
       min: Math.max(30, Math.min(50, minDutyPercent)),
@@ -223,16 +240,21 @@ function solveTargets() {
   const sampleRateHz = state.sampleRate * 1000;
   const adcTimeUs = state.adcSamples / sampleRateHz * 1e6;
   const minRamp = Math.max(10, Math.ceil(adcTimeUs + 9));
-  state.rampEndTime = Math.max(minRamp, Math.min(80, state.rampEndTime));
+  state.rampEndTime = Math.max(minRamp, Math.min(5000, state.rampEndTime));
   const maxSlopeForRange =
     C * Math.min(sampleRateHz * 0.8, device.maxIfMHz * 1e6) /
       (2 * state.rangeGate * 1e12);
-  const maxSlopeForBand = (device.maxFreqGHz - device.startFreqGHz) * 1000 / state.rampEndTime;
+  const maxSlopeForBand = (device.maxFreqGHz - 0.1 - device.startFreqGHz) *
+    1000 / state.rampEndTime;
   const slopeForResolution =
     C * sampleRateHz / (2 * state.adcSamples * state.rangeResolutionTarget * 1e12);
-  const allowedSlope = Math.floor(Math.min(120, maxSlopeForBand, maxSlopeForRange) * 10) / 10;
-  const neededSlope = Math.ceil(Math.max(10, slopeForResolution) * 10) / 10;
+  const allowedSlope = Math.floor(Math.min(120, maxSlopeForBand, maxSlopeForRange) * 100) / 100;
+  const neededSlope = Math.ceil(Math.max(10, slopeForResolution) * 100) / 100;
   state.slope = Math.max(10, Math.min(allowedSlope, neededSlope));
+  while (state.slope + 0.01 <= allowedSlope + 1e-8 &&
+    metricsFor(state).rangeResolution > state.rangeResolutionTarget) {
+    state.slope = Math.round((state.slope + 0.01) * 100) / 100;
+  }
 
   const slopeHzPerS = state.slope * 1e12;
   const centerFreq =
@@ -244,7 +266,8 @@ function solveTargets() {
       AOP_SDK36_LIMITS.solverL3ReserveBytes) : 255;
   const maxLoops = Math.min(255, memoryLoops,
     Math.floor(budgetUs / (NUM_TX * (state.rampEndTime + 10))));
-  state.numLoops = Math.max(1, maxLoops);
+  state.numLoops = state.device === "6843" ? Math.max(2, maxLoops - maxLoops % 2) :
+    Math.max(1, maxLoops);
 
   // Resolution is the first velocity objective. Use the most loops that fit
   // L3, then the shortest chirp period that meets the requested resolution.
@@ -254,6 +277,10 @@ function solveTargets() {
   const maxIdleUs = Math.floor(budgetUs / (NUM_TX * state.numLoops) - state.rampEndTime);
   state.idleTime = Math.min(Number(els.idleTime.max), maxIdleUs,
     Math.max(10, Math.ceil(requiredPeriodUs - state.rampEndTime)));
+  while (state.idleTime < Math.min(Number(els.idleTime.max), maxIdleUs) &&
+    metricsFor(state).velocityResolution > state.velocityResolutionTarget) {
+    state.idleTime += 1;
+  }
 }
 
 function optimizeVelocity() {
@@ -262,7 +289,7 @@ function optimizeVelocity() {
   render();
 }
 
-function statusItems(m) {
+function statusItems(m, validation) {
   const items = [];
   const dutyLimit = state.dutyLimit / 100;
   const rangeOk = m.usableRange >= state.rangeGate;
@@ -284,9 +311,9 @@ function statusItems(m) {
     value: `${fmt(m.maxVelocity, 3)} m/s vs ${fmt(state.maxVelocityTarget, 2)} m/s`,
   });
   items.push({
-    level: velocityResolutionOk ? "ok" : "warn",
+    level: velocityResolutionOk ? "ok" : "bad",
     label: velocityResolutionOk ? "Velocity resolution clears target" : "Velocity resolution above target",
-    value: `${fmt(m.velocityResolution, 4)} m/s vs ${fmt(state.velocityResolutionTarget, 4)} m/s`,
+    value: `${fmt(m.velocityResolution, 6)} m/s vs ${fmt(state.velocityResolutionTarget, 6)} m/s`,
   });
   items.push({
     level: rangeResolutionOk ? "ok" : "warn",
@@ -308,6 +335,12 @@ function statusItems(m) {
     label: frequencyOk ? "Chirp sweep stays inside device band" : "Chirp sweep exceeds device band",
     value: `${fmt(m.endFreqGHz, 3)} GHz end vs ${currentDevice().maxFreqGHz} GHz limit`,
   });
+  if (frequencyOk && currentDevice().maxFreqGHz - m.endFreqGHz < 0.1) {
+    items.push({
+      level: "warn", label: "Chirp sweep is close to RF band edge",
+      value: `${fmt((currentDevice().maxFreqGHz - m.endFreqGHz) * 1000, 1)} MHz margin`,
+    });
+  }
   if (m.l3) {
     const usedKiB = m.l3.usedBytes / 1024;
     const freeKiB = m.l3.freeBytes / 1024;
@@ -330,6 +363,9 @@ function statusItems(m) {
       label: "Estimated usable range has little margin",
       value: "TI visualizer/hardware validation recommended",
     });
+  }
+  for (const error of validation.errors) {
+    items.push({ level: "bad", label: "SDK/demo checker", value: error });
   }
   return items;
 }
@@ -371,7 +407,7 @@ function generateConfig(m) {
     "channelCfg 15 7 0",
     "adcCfg 2 1",
     "adcbufCfg -1 0 1 1 1",
-    `profileCfg 0 ${device.startFreqGHz} ${Math.round(state.idleTime)} 7 ${fmt(state.rampEndTime, 2).replace(/\.00$/, "")} 0 0 ${fmt(state.slope, 1).replace(/\.0$/, "")} 1 ${state.adcSamples} ${Math.round(state.sampleRate)} 0 0 ${device.rxGain}`,
+    `profileCfg 0 ${device.startFreqGHz} ${Math.round(state.idleTime)} 7 ${fmtTrim(state.rampEndTime, 2)} 0 0 ${fmtTrim(state.slope, 3)} 1 ${state.adcSamples} ${Math.round(state.sampleRate)} 0 0 ${device.rxGain}`,
     "chirpCfg 0 0 0 0 0 0 0 1",
     "chirpCfg 1 1 0 0 0 0 0 2",
     "chirpCfg 2 2 0 0 0 0 0 4",
@@ -408,7 +444,7 @@ function liveValues(m) {
   const profileCfg =
     `profileCfg 0 ${device.startFreqGHz} ${Math.round(state.idleTime)} 7 ` +
     `${fmt(state.rampEndTime, 2).replace(/\.00$/, "")} 0 0 ` +
-    `${fmt(state.slope, 1).replace(/\.0$/, "")} 1 ${state.adcSamples} ` +
+    `${fmtTrim(state.slope, 3)} 1 ${state.adcSamples} ` +
     `${Math.round(state.sampleRate)} 0 0 ${device.rxGain}`;
   const frameCfg =
     `frameCfg 0 2 ${state.numLoops} 0 ${fmt(frameMs, 3).replace(/\.000$/, "")} 1 0`;
@@ -425,7 +461,7 @@ function liveValues(m) {
     ["ADC time", `${fmt(m.adcTime * 1e6, 3)} us`],
     ["Bandwidth", `${fmt(m.bandwidth / 1e6, 1)} MHz`],
     ["Center frequency", `${fmt(m.centerFreq / 1e9, 4)} GHz`],
-    ["Range bins", `${m.numRangeBins}`],
+    ["Range FFT / processed bins", `${m.fftRangeBins} / ${m.numRangeBins}`],
     ["Estimated usable range", `${fmt(m.usableRange, 2)} m`],
     ["Chirp period", `${fmt(m.chirpPeriod * 1e6, 2)} us`],
     ["Chirps/frame", `${m.chirpsPerFrame}`],
@@ -573,7 +609,7 @@ function cfgExplainer(m) {
     ["idle time", `${Math.round(state.idleTime)} us`],
     ["ADC valid start", "7 us"],
     ["ramp end", `${fmt(state.rampEndTime, 2)} us`],
-    ["slope", `${fmt(state.slope, 1)} MHz/us`],
+    ["slope", `${fmt(state.slope, 2)} MHz/us`],
     ["TX start", "0 us"],
     ["ADC samples", `${state.adcSamples}`],
     ["sample rate", `${Math.round(state.sampleRate)} ksps`],
@@ -591,13 +627,16 @@ function cfgExplainer(m) {
   ];
   const derivedItems = [
     ["bandwidth", `${fmt(m.bandwidth / 1e6, 1)} MHz`],
-    ["range bins", `${m.numRangeBins}`],
+    ["range FFT / processed bins", `${m.fftRangeBins} / ${m.numRangeBins}`],
     ["FFT range span", `${fmt(m.fftRangeSpan, 2)} m`],
+    ["last range-bin center", `${fmt(m.lastRangeBin, 2)} m`],
     ["estimated usable range", `${fmt(m.usableRange, 2)} m (TI 80% IF model)`],
     ["range bin spacing", `${fmt(m.rangeStep, 4)} m`],
     ["range resolution", `${fmt(m.rangeResolution, 4)} m`],
+    ["HPF2 corner equivalent", `${fmt(m.hpf2CornerRangeM, 2)} m (attenuation, not cutoff)`],
     ["max radial velocity", `${fmt(m.maxVelocity, 3)} m/s`],
     ["velocity resolution", `${fmt(m.velocityResolution, 4)} m/s`],
+    ["Doppler FFT bin step", `${fmt(m.dopplerStep, 4)} m/s`],
     ["center frequency", `${fmt(m.centerFreq / 1e9, 4)} GHz`],
   ];
   const section = (title, items) => `
@@ -640,6 +679,10 @@ function syncInputs() {
 function render() {
   const bounds = targetBounds();
   applyTargetBounds(bounds);
+  els.sampleRate.max = state.device === "6843" ? 12500 : 18750;
+  if (state.sampleRate > Number(els.sampleRate.max)) {
+    state.sampleRate = Number(els.sampleRate.max);
+  }
   els.numLoops.max = state.device === "6843" ?
     aopMaxLoopsForL3(state.adcSamples, NUM_TX) : 255;
   if (state.numLoops > Number(els.numLoops.max)) state.numLoops = Number(els.numLoops.max);
@@ -652,13 +695,14 @@ function render() {
   document.getElementById("rangeResolutionTargetOut").value = `${fmt(state.rangeResolutionTarget, 3)} m`;
   document.getElementById("dutyLimitOut").value = `${state.dutyLimit}%`;
   document.getElementById("sampleRateOut").value = `${fmt(state.sampleRate / 1000, 3)} Msps`;
-  document.getElementById("slopeOut").value = `${fmt(state.slope, 1)} MHz/us`;
+  document.getElementById("slopeOut").value = `${fmt(state.slope, 2)} MHz/us`;
   document.getElementById("idleTimeOut").value = `${Math.round(state.idleTime)} us`;
   document.getElementById("rampEndTimeOut").value = `${fmt(state.rampEndTime, 2)} us`;
   document.getElementById("numLoopsOut").value = `${state.numLoops}`;
   document.getElementById("rangeThresholdOut").value = `${state.rangeThreshold} dB`;
   document.getElementById("dopplerThresholdOut").value = `${state.dopplerThreshold} dB`;
-  document.getElementById("velocityResolution").textContent = `${fmt(m.velocityResolution, 4)} m/s`;
+  document.getElementById("velocityResolution").textContent = `${fmt(m.velocityResolution, 6)} m/s`;
+  document.getElementById("dopplerStep").textContent = `${fmt(m.dopplerStep, 6)} m/s`;
   document.getElementById("maxVelocity").textContent = `${fmt(m.maxVelocity, 3)} m/s`;
   document.getElementById("rangeResolution").textContent = `${fmt(m.rangeResolution, 4)} m`;
   document.getElementById("fftSpan").textContent = `${fmt(m.fftRangeSpan, 2)} m`;
@@ -673,12 +717,12 @@ function render() {
     `${state.adcSamples} samples, ${m.numRangeBins} bins, ${m.chirpsPerFrame} chirps/frame`;
   document.getElementById("cfgExplainer").innerHTML = cfgExplainer(m);
 
-  const status = statusItems(m);
+  const cfg = generateConfig(m);
+  const status = statusItems(m, analyzeConfig(cfg.text));
   document.getElementById("statusList").innerHTML = status
     .map((item) => `<div class="status-item status-${item.level}"><span>${item.label}</span><strong>${item.value}</strong></div>`)
     .join("");
 
-  const cfg = generateConfig(m);
   document.getElementById("configName").textContent = cfg.name;
   document.getElementById("configText").value = cfg.text;
   document.getElementById("liveValues").innerHTML = liveValues(m)
@@ -690,7 +734,8 @@ function updateStateFromInput(event) {
   const target = event.target;
   const id = target.id;
   if (id === "device") state.device = target.value;
-  else if (id === "adcSamples") state.adcSamples = Number(target.value);
+  else if (id === "adcSamples") state.adcSamples = Math.max(64,
+    Math.min(1024, Math.round(Number(target.value) || 64)));
   else if (id in state) state[id] = Number(target.value);
   if (targetIds.has(id)) solveTargets();
   render();
@@ -716,7 +761,7 @@ async function copyConfig() {
 }
 
 ids.forEach((id) => {
-  els[id].addEventListener("input", updateStateFromInput);
+  if (id !== "adcSamples") els[id].addEventListener("input", updateStateFromInput);
   els[id].addEventListener("change", updateStateFromInput);
 });
 
